@@ -46,9 +46,10 @@ def create_app(
 ) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings.LOG_LEVEL, settings.secret_values())
-    if llm is None and settings.LLM_API_KEY is not None and settings.LLM_MODEL:
+    llm_key = settings.LLM_API_KEY.get_secret_value() if settings.LLM_API_KEY else ""
+    if llm is None and llm_key and settings.LLM_MODEL:
         llm = OpenAICompatibleProvider(
-            api_key=settings.LLM_API_KEY.get_secret_value(),
+            api_key=llm_key,
             base_url=settings.LLM_BASE_URL,
             model=settings.LLM_MODEL,
         )

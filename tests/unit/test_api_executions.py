@@ -98,14 +98,27 @@ async def test_invalid_body_422_envelope(client_for: ClientFactory) -> None:
 async def test_rate_limit_429_with_retry_after(client_for: ClientFactory) -> None:
     async with client_for(RATE_LIMIT_PER_MINUTE=2) as c:
         codes = [
-            (await c.get("/api/v1/executions/exe_missing", headers=KEY)).status_code
+            (await c.post("/api/v1/executions", json={"code": "print(1)"}, headers=KEY)).status_code
             for _ in range(3)
         ]
-        r = await c.get("/api/v1/executions/exe_missing", headers=KEY)
-    assert codes[:2] == [404, 404]
-    assert codes[2] == 429
+        r = await c.post("/api/v1/executions", json={"code": "print(1)"}, headers=KEY)
+    assert codes == [202, 202, 429]
     assert r.json()["error"]["code"] == "rate_limited"
     assert int(r.headers["Retry-After"]) >= 1
+
+
+async def test_polling_reads_do_not_consume_submit_budget(client_for: ClientFactory) -> None:
+    """Polling a running execution once a second must not lock the client out."""
+    async with client_for(RATE_LIMIT_PER_MINUTE=2) as c:
+        r = await c.post("/api/v1/executions", json={"code": "print(1)"}, headers=KEY)
+        exec_id = r.json()["id"]
+        polls = [
+            (await c.get(f"/api/v1/executions/{exec_id}", headers=KEY)).status_code
+            for _ in range(20)
+        ]
+        metrics = await c.get("/metrics", headers=KEY)
+    assert set(polls) == {200}
+    assert metrics.status_code == 200
 
 
 async def test_request_id_echoed(client_for: ClientFactory) -> None:

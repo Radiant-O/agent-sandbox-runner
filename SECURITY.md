@@ -14,10 +14,10 @@ All submitted code is treated as hostile. That includes code written by the AI a
 | No server secrets in the sandbox: `envs={}` is passed explicitly, and the E2B/LLM keys stay server-side. | `E2BSandboxBackend._create` |
 | Per-run timeout, plus a sandbox lifetime timeout as a backstop if `kill()` fails. | `commands.run(timeout=)`, `AsyncSandbox.create(timeout=)` |
 | Limits on code size and timeout range. | `MAX_CODE_BYTES`, `MAX_TIMEOUT_SECONDS` |
-| Output is byte-capped while streaming, so the server never holds more than `MAX_OUTPUT_BYTES` per stream. | `app/sandbox/output.py` |
+| Output is byte-capped while streaming (`retain_output=False`, so the SDK keeps no copy). The server holds at most `MAX_OUTPUT_BYTES` per stream per execution. Flooding output still uses network bandwidth until the timeout. | `app/sandbox/output.py` |
 | Concurrency cap on live sandboxes, which limits cost and abuse. | `MAX_CONCURRENT_SANDBOXES` |
 | API key auth with constant-time comparison. Executions are scoped to the key that created them; other keys get 404. | `app/dependencies.py` |
-| Per-key token-bucket rate limit. | `RATE_LIMIT_PER_MINUTE` |
+| Per-key token-bucket rate limit on submissions and agent runs. | `RATE_LIMIT_PER_MINUTE` |
 | Agent bounds: max steps, max tool calls, a wall-clock budget, and max tokens per call. | `AGENT_*` settings |
 | Logs never contain code bodies (only size and sha256) or configured secrets (redacted). | `app/core/logging.py` |
 

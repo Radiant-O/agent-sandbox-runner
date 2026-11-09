@@ -1,5 +1,6 @@
 """E2B backend tests against a scripted stand-in for e2b.AsyncSandbox (no network)."""
 
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -12,6 +13,7 @@ from e2b import (
     RateLimitException,
     SandboxException,
     SandboxNotRunningException,
+    ServiceBusyException,
     TimeoutException,
 )
 from pydantic import SecretStr
@@ -40,11 +42,16 @@ class Script:
         self.kill_calls = 0
         self.written: dict[str, str] = {}
         self.run_calls: list[dict[str, Any]] = []
+        self.write_error: BaseException | None = None
+        self.now = 0.0  # fake monotonic clock
+        self.run_elapsed = 0.0  # how long commands.run "takes"
 
 
 def make_sandbox_cls(script: Script) -> type:
     class FakeFiles:
         async def write(self, path: str, data: str) -> None:
+            if script.write_error is not None:
+                raise script.write_error
             script.written[path] = data
 
     class FakeCommands:
@@ -57,6 +64,7 @@ def make_sandbox_cls(script: Script) -> type:
             **kw: Any,
         ) -> CommandResult:  # type: ignore[type-arg]
             script.run_calls.append({"cmd": cmd, "timeout": timeout, **kw})
+            script.now += script.run_elapsed
             for c in script.chunks_out:
                 on_stdout(c)
             for c in script.chunks_err:
@@ -102,7 +110,11 @@ def backend(settings: Settings, script: Script, metrics: Metrics) -> E2BSandboxB
     settings.E2B_API_KEY = SecretStr("e2b-test")
     settings.MAX_OUTPUT_BYTES = 1024
     return E2BSandboxBackend(
-        settings, metrics, sandbox_cls=make_sandbox_cls(script), retry_wait_seconds=0
+        settings,
+        metrics,
+        sandbox_cls=make_sandbox_cls(script),
+        retry_wait_seconds=0,
+        clock=lambda: script.now,
     )
 
 
@@ -143,6 +155,7 @@ async def test_timeout_returns_timed_out_with_partial_output(
     backend: E2BSandboxBackend, script: Script
 ) -> None:
     script.chunks_out = ["partial\n"]
+    script.run_elapsed = 5.0  # the user's full timeout really elapsed
     script.run_result = TimeoutException("deadline_exceeded")
     out = await _run(backend)
     assert out.timed_out is True
@@ -247,3 +260,54 @@ async def test_sandbox_envs_empty_and_internet_off(
     assert kw["allow_internet_access"] is False
     assert kw["timeout"] == 65
     assert kw["api_key"] == "e2b-test"
+
+
+# ---- final-review fixes ------------------------------------------------------
+
+
+async def test_sdk_does_not_retain_output(backend: E2BSandboxBackend, script: Script) -> None:
+    """C1: the SDK must not accumulate a second, uncapped copy of the output."""
+    await _run(backend)
+    assert script.run_calls[0]["retain_output"] is False
+
+
+async def test_early_timeout_exception_is_upstream_not_user_timeout(
+    backend: E2BSandboxBackend, script: Script
+) -> None:
+    """I1: e.g. gRPC CANCELED when E2B shuts the sandbox down: not the user's timeout."""
+    script.run_elapsed = 0.5
+    script.run_result = TimeoutException("canceled: sandbox shut down")
+    with pytest.raises(SandboxUpstreamError):
+        await _run(backend, timeout_s=5)
+
+
+async def test_file_write_timeout_is_upstream(backend: E2BSandboxBackend, script: Script) -> None:
+    """I1: the code never ran, so this cannot be a user-code timeout."""
+    script.write_error = TimeoutException("Request timed out")
+    with pytest.raises(SandboxUpstreamError):
+        await _run(backend)
+
+
+async def test_unknown_sdk_exception_mid_run_is_upstream(
+    backend: E2BSandboxBackend, script: Script
+) -> None:
+    """I1/M3: ServiceBusyException is not a SandboxException; bare Exceptions happen too."""
+    script.run_result = ServiceBusyException("503")
+    with pytest.raises(SandboxUpstreamError):
+        await _run(backend)
+    script.run_result = Exception("Command ended without an end event")
+    with pytest.raises(SandboxUpstreamError):
+        await _run(backend)
+
+
+async def test_create_uses_one_idempotency_key_across_retries(
+    backend: E2BSandboxBackend, script: Script
+) -> None:
+    """I4: a retried create after a lost response must not spawn a second sandbox."""
+    script.create_errors = [httpx.ReadTimeout("lost response")]
+    await _run(backend)
+    keys = [c["idempotency_key"] for c in script.create_calls]
+    assert len(keys) == 2 and keys[0] == keys[1]
+    assert re.fullmatch(r"[a-z0-9-]{1,255}", keys[0])
+    await _run(backend)
+    assert script.create_calls[-1]["idempotency_key"] != keys[0]  # new logical create

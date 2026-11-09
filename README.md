@@ -17,7 +17,7 @@ flowchart LR
 
 ## What it does
 
-- **`POST /api/v1/executions`** runs code in a fresh sandbox. It is asynchronous by default (`202` plus a `Location` header); add `?wait=true` to block until the result is ready.
+- **`POST /api/v1/executions`** runs code in a fresh sandbox. It is asynchronous by default (`202` plus a `Location` header); add `?wait=true` to block until the result is ready. If it isn't ready within the timeout plus 30 seconds (for example, while queued behind the concurrency cap), you get `202` with the current state, so poll from there.
 - **`GET /api/v1/executions/{id}`** returns status, stdout/stderr, exit code, duration, sandbox id and error classification.
 - **`POST /api/v1/agent/run`** takes a natural-language task. The agent decides whether code is needed, writes it, runs it through the sandbox tool, reads the result and answers. The response includes every execution record, so claims can be checked.
 - **`GET /metrics`** reports execution counts by status, p50/p95 duration, live and created sandboxes, average create time, cleanup failures, create retries and agent stop reasons.
@@ -71,9 +71,9 @@ The full rationale is in [`docs/design.md`](docs/design.md). The highlights:
 
 - **`commands.run` instead of a notebook kernel.** Each execution writes `/home/user/main.py` and runs `python3` on it, which gives real process semantics and a real exit code. The SDK raises `CommandExitException` for non-zero exits, and we turn that back into a *result*, not an error.
 - **Two timeouts.** One per command (the user's limit) and one for the sandbox's lifetime (a backstop). `kill()` always runs in `finally`; if it fails, the lifetime timeout still destroys the VM, and `cleanup_failures_total` records it.
-- **Retry creation, never execution.** Sandbox creation is idempotent, so transient failures (rate limit, 503, unreachable, transport) are retried with backoff. Code execution can have side effects, so it never is.
-- **Classify carefully.** In the SDK, `SandboxNotRunningException` is a *subclass* of `TimeoutException`. Catching them in the wrong order would report a crashed sandbox as the user's code timing out.
-- **Stream output into byte-capped buffers.** A `print` in a loop can't exhaust server memory, and partial output survives timeouts.
+- **Retry creation, never execution.** Transient create failures (rate limit, 503, unreachable, transport) are retried with backoff. Every attempt reuses one `idempotency_key`, so a retry after a lost response returns the sandbox E2B already made instead of creating an orphan. Code execution can have side effects, so it is never retried.
+- **Classify carefully.** In the SDK, `SandboxNotRunningException` is a *subclass* of `TimeoutException`, and a plain `TimeoutException` is also raised when E2B cancels the stream (for example, the sandbox was shut down). A run is reported as `timed_out` only if the user's time budget was actually used up; anything earlier is `upstream_error`.
+- **Stream output into byte-capped buffers.** Output is streamed with `retain_output=False`, so the SDK keeps no second, uncapped copy. A `print` in a loop can't exhaust server memory, and partial output survives timeouts.
 - **Concurrency is capped by a semaphore around sandbox sessions.** Excess work waits as `queued` instead of opening more VMs, which keeps cost bounded.
 - **The agent can't "claim" success.** Its tool returns the backend's record as JSON. The run result carries `any_execution_succeeded`, computed from stored records rather than model text, and `answer` is `null` unless the run completed.
 - **No import blocklists.** They're security theater. Containment is the sandbox's job; this service limits reach (no internet, no secrets) and blast radius (time, output, concurrency). See [`SECURITY.md`](SECURITY.md).
@@ -91,7 +91,7 @@ All settings are environment variables; see [`.env.example`](.env.example).
 | `DEFAULT_TIMEOUT_SECONDS` / `MAX_TIMEOUT_SECONDS` | `30` / `120` | Execution timeouts |
 | `MAX_CODE_BYTES` / `MAX_OUTPUT_BYTES` | `100000` / `65536` | Input and output caps (output cap is per stream) |
 | `SANDBOX_CREATE_RETRIES` | `3` | Attempts for transient create failures |
-| `RATE_LIMIT_PER_MINUTE` | `30` | Per API key |
+| `RATE_LIMIT_PER_MINUTE` | `30` | Per API key, on submissions and agent runs (polling reads are not charged) |
 | `LLM_API_KEY` / `LLM_MODEL` | — / — | OpenRouter key and model (e.g. `anthropic/claude-haiku-5.5`) |
 | `AGENT_MAX_STEPS` / `AGENT_MAX_TOOL_CALLS` / `AGENT_TIMEOUT_SECONDS` | `6` / `4` / `180` | Agent bounds |
 

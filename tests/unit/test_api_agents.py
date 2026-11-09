@@ -38,3 +38,14 @@ async def test_agent_endpoint_rejects_empty_task(settings: Settings) -> None:
     app = create_app(settings, backend=FakeSandboxBackend(), llm=ScriptedLLM([]))
     r = await _post(app, {"task": ""})
     assert r.status_code == 422
+
+
+async def test_blank_llm_key_with_model_boots_and_returns_503(settings: Settings) -> None:
+    """I3: copying .env.example and filling in only E2B must not crash startup."""
+    from pydantic import SecretStr
+
+    settings.LLM_API_KEY = SecretStr("")
+    settings.LLM_MODEL = "anthropic/claude-haiku-5.5"
+    app = create_app(settings, backend=FakeSandboxBackend())
+    r = await _post(app, {"task": "hi"})
+    assert r.status_code == 503

@@ -3,9 +3,11 @@
 SDK calls used here were verified against e2b 2.63.0 (see docs/design.md).
 """
 
+import asyncio
 import logging
 import time
-from collections.abc import AsyncIterator
+import uuid
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -45,6 +47,8 @@ log = logging.getLogger(__name__)
 
 SCRIPT_PATH = "/home/user/main.py"
 RUN_COMMAND = f"python3 {SCRIPT_PATH}"
+# A TimeoutException earlier than this fraction of the user's timeout is infrastructure.
+USER_TIMEOUT_TOLERANCE = 0.9
 
 # Only these are worth retrying for sandbox *creation*. Code execution is never retried.
 _TRANSIENT_CREATE_ERRORS = (
@@ -60,24 +64,37 @@ def _ms_since(start: float) -> int:
 
 
 class E2BSession:
-    def __init__(self, sandbox: Any, max_output_bytes: int) -> None:
+    def __init__(
+        self, sandbox: Any, max_output_bytes: int, clock: Callable[[], float] = time.monotonic
+    ) -> None:
         self._sbx = sandbox
         self._max_output = max_output_bytes
+        self._clock = clock
         self.sandbox_id: str = sandbox.sandbox_id
 
     async def run_python(self, code: str, timeout_seconds: int) -> RunOutput:
         out = OutputBuffer(self._max_output)
         err = OutputBuffer(self._max_output)
-        start = time.monotonic()
+        start = self._clock()
+
+        try:
+            await self._sbx.files.write(SCRIPT_PATH, code)
+        except AuthenticationException as e:
+            raise SandboxAuthError("E2B rejected the credentials") from e
+        except Exception as e:
+            # The code never ran, so no failure here can be the user's fault.
+            raise SandboxUpstreamError(f"Could not upload code: {type(e).__name__}: {e}") from e
+
         exit_code: int | None = None
         timed_out = False
         try:
-            await self._sbx.files.write(SCRIPT_PATH, code)
             result = await self._sbx.commands.run(
                 RUN_COMMAND,
                 timeout=timeout_seconds,
                 on_stdout=out.append,
                 on_stderr=err.append,
+                # Without this the SDK keeps its own uncapped copy of all output in memory.
+                retain_output=False,
             )
             exit_code = result.exit_code
         except CommandExitException as e:
@@ -86,12 +103,24 @@ class E2BSession:
         except (SandboxNotRunningException, SandboxUnreachableException) as e:
             # Must precede TimeoutException: both subclass it in the SDK.
             raise SandboxUpstreamError(f"Sandbox stopped responding: {e}") from e
-        except TimeoutException:
+        except TimeoutException as e:
+            # The SDK also raises plain TimeoutException for gRPC CANCELED (sandbox shut
+            # down) and stream-open timeouts. Only blame the user's code if its time was
+            # actually used up.
+            elapsed = self._clock() - start
+            if elapsed < timeout_seconds * USER_TIMEOUT_TOLERANCE:
+                raise SandboxUpstreamError(
+                    f"Execution interrupted after {elapsed:.1f}s of {timeout_seconds}s: {e}"
+                ) from e
             timed_out = True
         except AuthenticationException as e:
             raise SandboxAuthError("E2B rejected the credentials") from e
-        except (SandboxException, httpx.TransportError) as e:
-            raise SandboxUpstreamError(f"E2B error during execution: {e}") from e
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            # SandboxException, ServiceBusyException (not a SandboxException), transport
+            # errors, and bare Exceptions raised by the SDK's stream handling.
+            raise SandboxUpstreamError(f"E2B error during execution: {type(e).__name__}") from e
         return RunOutput(
             stdout=out.text,
             stderr=err.text,
@@ -99,7 +128,7 @@ class E2BSession:
             stderr_truncated=err.truncated,
             exit_code=exit_code,
             timed_out=timed_out,
-            duration_ms=_ms_since(start),
+            duration_ms=int((self._clock() - start) * 1000),
         )
 
 
@@ -110,7 +139,9 @@ class E2BSandboxBackend:
         metrics: Metrics,
         sandbox_cls: Any = AsyncSandbox,
         retry_wait_seconds: float = 0.5,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
+        self._clock = clock
         self._settings = settings
         self._metrics = metrics
         self._sandbox_cls = sandbox_cls
@@ -129,6 +160,9 @@ class E2BSandboxBackend:
         if key is None or not key.get_secret_value():
             raise SandboxAuthError("E2B_API_KEY is not configured")
         start = time.monotonic()
+        # One key per logical create, reused by every retry: if a response is lost after
+        # E2B created the sandbox, the retry gets that sandbox instead of a second one.
+        idempotency_key = uuid.uuid4().hex
         try:
             async for attempt in AsyncRetrying(
                 retry=retry_if_exception_type(_TRANSIENT_CREATE_ERRORS),
@@ -145,6 +179,7 @@ class E2BSandboxBackend:
                         envs={},  # never pass server secrets into untrusted code
                         metadata={"app": "agent-sandbox-runner"},
                         api_key=key.get_secret_value(),
+                        idempotency_key=idempotency_key,
                     )
         except RetryError as e:
             cause = e.last_attempt.exception()
@@ -165,7 +200,7 @@ class E2BSandboxBackend:
     async def session(self, lifetime_seconds: int) -> AsyncIterator[SandboxSession]:
         sbx = await self._create(lifetime_seconds)
         try:
-            yield E2BSession(sbx, self._settings.MAX_OUTPUT_BYTES)
+            yield E2BSession(sbx, self._settings.MAX_OUTPUT_BYTES, self._clock)
         finally:
             try:
                 await sbx.kill()

@@ -23,14 +23,22 @@ def api_error(
 async def require_api_key(
     request: Request, api_key: Annotated[str | None, Depends(_api_key_header)]
 ) -> str:
-    """Authenticate and rate-limit. Returns the caller's owner id."""
+    """Authenticate. Returns the caller's owner id."""
     valid = request.app.state.settings.api_key_list()
     matched = api_key is not None and any(
         hmac.compare_digest(api_key.encode(), k.encode()) for k in valid
     )
     if not matched or api_key is None:
         raise api_error(401, "unauthorized", "Missing or invalid X-API-Key header.")
-    owner = owner_id(api_key)
+    return owner_id(api_key)
+
+
+async def rate_limited(request: Request, owner: Annotated[str, Depends(require_api_key)]) -> str:
+    """Authenticate and charge the caller's rate-limit budget.
+
+    Applied to requests that create sandboxes or spend LLM tokens. Cheap reads (polling an
+    execution, metrics) are authenticated but not charged, so polling cannot lock a client out.
+    """
     limiter: RateLimiter = request.app.state.rate_limiter
     retry_after = limiter.check(owner)
     if retry_after is not None:
@@ -54,5 +62,6 @@ def get_metrics(request: Request) -> Metrics:
 
 
 Owner = Annotated[str, Depends(require_api_key)]
+LimitedOwner = Annotated[str, Depends(rate_limited)]
 Executions = Annotated[ExecutionService, Depends(get_execution_service)]
 MetricsDep = Annotated[Metrics, Depends(get_metrics)]

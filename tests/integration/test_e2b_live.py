@@ -31,6 +31,18 @@ async def test_live_cases(live_backend: E2BSandboxBackend) -> None:
         slow = await s.run_python("import time; time.sleep(30)", 3)
         assert slow.timed_out is True
 
+        # The timed-out process must not keep running in a reused (agent) sandbox.
+        ps = await s.run_python(
+            "import subprocess; print(subprocess.run(['ps','-eo','args'],"
+            "capture_output=True,text=True).stdout)",
+            20,
+        )
+        assert "time.sleep(30)" not in ps.stdout, ps.stdout
+
+        flood = await s.run_python("while True: print('x' * 10_000)", 5)
+        assert flood.timed_out is True
+        assert flood.stdout_truncated is True
+
         net = await s.run_python(
             "import urllib.request; urllib.request.urlopen('https://example.com', timeout=5)",
             20,

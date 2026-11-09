@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Query, Response
 
-from app.dependencies import Executions, Owner, api_error
+from app.dependencies import Executions, LimitedOwner, Owner, api_error
 from app.schemas.errors import ErrorResponse
 from app.schemas.executions import ExecutionCreate, ExecutionOut
 
@@ -24,7 +24,7 @@ _ERRORS: dict[int | str, dict[str, object]] = {
 )
 async def create_execution(
     body: ExecutionCreate,
-    owner: Owner,
+    owner: LimitedOwner,
     svc: Executions,
     response: Response,
     wait: bool = Query(False, description="Block until the execution finishes."),

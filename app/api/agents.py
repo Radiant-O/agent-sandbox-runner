@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Request
 
-from app.dependencies import Owner, api_error
+from app.dependencies import LimitedOwner, api_error
 from app.schemas.agents import AgentRunRequest, AgentRunResult
 from app.schemas.errors import ErrorResponse
 from app.services.agent_service import AgentService
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/v1/agent", tags=["agent"])
     },
     summary="Run a natural-language task with a tool-calling agent",
 )
-async def run_agent(body: AgentRunRequest, owner: Owner, request: Request) -> AgentRunResult:
+async def run_agent(body: AgentRunRequest, owner: LimitedOwner, request: Request) -> AgentRunResult:
     agent: AgentService | None = request.app.state.agent_service
     if agent is None:
         raise api_error(
