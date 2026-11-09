@@ -45,7 +45,12 @@ API layer → `ExecutionService` (policy, concurrency, persistence, classificati
 
 ## Live results
 
-Pending: to be filled in from `examples/run_examples.py` and `pytest -m integration` against real E2B, including measured sandbox create latency.
+The run against real E2B (2026-11-10) is summarised in the README's "Live results" table. Highlights:
+- Sandbox creation averaged **~600 ms**. That is the fixed cost of a fresh VM per execution, and the main argument for pooling in a future version.
+- Every outcome classified as designed: `KeyError` and `SyntaxError` as `failed/user_code_error` with `exception_type`, the busy loop as `timed_out`, and the 1 MB print capped with `stdout_truncated`.
+- After a timeout, no leftover process was found in the sandbox. This confirms E2B's documented behaviour that the command timeout kills the process.
+- **Surprise:** with internet disabled, `urlopen` doesn't fail fast. DNS resolution retries for about 20 s before `Temporary failure in name resolution`, so a short timeout reports `timed_out` instead. My first live test assumed a fast failure and was wrong; the test now asserts the security property (the request never completes) rather than the failure mode.
+- The live agent test is pending a valid OpenRouter key (the first attempt got HTTP 401). The agent handled it correctly: it stopped with `llm_error` and made no claims.
 
 ## Lessons learned
 

@@ -65,6 +65,22 @@ Every execution ends in exactly one terminal status. The core distinction is **"
 
 API errors share one envelope: `{"error": {"code", "message", "request_id"}}`. The codes are `unauthorized` (401), `not_found` (404), `invalid_request`, `code_too_large` and `timeout_out_of_range` (422), `rate_limited` (429, with `Retry-After`) and `agent_unavailable` (503).
 
+## Live results
+
+These are real outputs from `examples/run_examples.py` against E2B on 2026-11-10 (`base` template, one fresh sandbox per execution):
+
+| case | status | category | exit | exception_type | duration |
+|---|---|---|---|---|---|
+| `math.factorial(20)` | `succeeded` | — | 0 | — | 1.2 s |
+| `data['missing']` | `failed` | `user_code_error` | 1 | `KeyError` | 0.6 s |
+| `def broken(:` | `failed` | `user_code_error` | 1 | `SyntaxError` | 0.6 s |
+| `while True: pass` (3 s timeout) | `timed_out` | `timeout` | — | — | 3.3 s |
+| `urlopen('https://example.com')` | `failed` | `user_code_error` | 1 | `urllib.error.URLError` (name resolution) | 20.8 s |
+| `print('x' * 1_000_000)` | `succeeded`, `stdout_truncated: true` | — | 0 | — | 3.2 s |
+| `timeout_seconds: 9999` | HTTP 422 `timeout_out_of_range` | — | — | — | — |
+
+Metrics afterwards: 6 sandboxes created and 6 killed (`sandboxes_live: 0`), `sandbox_create_ms_avg: 600`, no cleanup failures and no create retries.
+
 ## Design decisions
 
 The full rationale is in [`docs/design.md`](docs/design.md). The highlights:

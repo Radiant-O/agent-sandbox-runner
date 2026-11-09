@@ -10,7 +10,7 @@ All submitted code is treated as hostile. That includes code written by the AI a
 |---|---|
 | Code runs only in E2B sandboxes, never on the API host. There is no `exec`/`eval`/`subprocess` on user input anywhere in `app/`. | `app/sandbox/e2b_backend.py` |
 | A fresh sandbox per API execution, and one per agent run. Never shared across callers. | `ExecutionService`, `AgentService` |
-| Outbound internet disabled by default (`allow_internet_access=False`). | `SANDBOX_ALLOW_INTERNET` |
+| Outbound internet disabled by default (`allow_internet_access=False`). Observed live: DNS resolution fails after about 20 s of resolver retries (`URLError: Temporary failure in name resolution`); with a shorter timeout, the run times out first. | `SANDBOX_ALLOW_INTERNET` |
 | No server secrets in the sandbox: `envs={}` is passed explicitly, and the E2B/LLM keys stay server-side. | `E2BSandboxBackend._create` |
 | Per-run timeout, plus a sandbox lifetime timeout as a backstop if `kill()` fails. | `commands.run(timeout=)`, `AsyncSandbox.create(timeout=)` |
 | Limits on code size and timeout range. | `MAX_CODE_BYTES`, `MAX_TIMEOUT_SECONDS` |

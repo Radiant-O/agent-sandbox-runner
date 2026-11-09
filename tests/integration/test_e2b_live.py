@@ -43,8 +43,14 @@ async def test_live_cases(live_backend: E2BSandboxBackend) -> None:
         assert flood.timed_out is True
         assert flood.stdout_truncated is True
 
+        # Egress is blocked. Observed live (2026-11-10): DNS resolution fails after ~20s
+        # of resolver retries, so with this short timeout the run times out first.
+        # Either way the request must never complete.
         net = await s.run_python(
-            "import urllib.request; urllib.request.urlopen('https://example.com', timeout=5)",
-            20,
+            "import urllib.request; "
+            "r = urllib.request.urlopen('https://example.com', timeout=5); "
+            "print('REACHED', r.status)",
+            8,
         )
-        assert net.exit_code not in (0, None), net
+        assert net.exit_code != 0, net
+        assert "REACHED" not in net.stdout
