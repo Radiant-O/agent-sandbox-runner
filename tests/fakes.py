@@ -7,8 +7,13 @@ from contextlib import asynccontextmanager
 from app.sandbox.base import RunOutput, SandboxSession
 
 OK = RunOutput(
-    stdout="ok\n", stderr="", stdout_truncated=False, stderr_truncated=False,
-    exit_code=0, timed_out=False, duration_ms=1,
+    stdout="ok\n",
+    stderr="",
+    stdout_truncated=False,
+    stderr_truncated=False,
+    exit_code=0,
+    timed_out=False,
+    duration_ms=1,
 )
 
 
