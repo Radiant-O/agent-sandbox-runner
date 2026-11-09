@@ -4,6 +4,7 @@ Every code execution — from the REST API or from the agent — goes through he
 """
 
 import asyncio
+import functools
 import logging
 import re
 from collections.abc import AsyncIterator
@@ -111,7 +112,7 @@ class ExecutionService:
         )
         task = asyncio.create_task(self._run_standalone(rec), name=f"exec-{rec.id}")
         self._tasks[rec.id] = task
-        task.add_done_callback(lambda _t, i=rec.id: self._tasks.pop(i, None))
+        task.add_done_callback(functools.partial(self._forget_task, rec.id))
         return rec
 
     async def wait(self, execution_id: str, owner: str) -> ExecutionRecord | None:
@@ -171,6 +172,9 @@ class ExecutionService:
         await self._store.mark_interrupted()
 
     # ---- internals ----------------------------------------------------------
+
+    def _forget_task(self, execution_id: str, _task: "asyncio.Task[None]") -> None:
+        self._tasks.pop(execution_id, None)
 
     async def _run_standalone(self, rec: ExecutionRecord) -> None:
         token = execution_id_var.set(rec.id)
