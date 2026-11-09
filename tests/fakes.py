@@ -62,3 +62,30 @@ class FakeSandboxBackend:
         finally:
             self.live -= 1
             self.killed += 1
+
+
+# ---- LLM ---------------------------------------------------------------------
+
+from typing import Any  # noqa: E402
+
+from app.llm.base import LLMTurn  # noqa: E402
+
+
+class ScriptedLLM:
+    """Returns pre-scripted turns in order; records every request it received."""
+
+    def __init__(self, turns: list[LLMTurn | Exception], repeat_last: bool = False) -> None:
+        self.turns = list(turns)
+        self.repeat_last = repeat_last
+        self.requests: list[list[dict[str, Any]]] = []
+
+    async def complete(
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]], max_tokens: int
+    ) -> LLMTurn:
+        self.requests.append([dict(m) for m in messages])
+        if not self.turns:
+            raise AssertionError("ScriptedLLM ran out of turns")
+        nxt = self.turns[0] if (self.repeat_last and len(self.turns) == 1) else self.turns.pop(0)
+        if isinstance(nxt, Exception):
+            raise nxt
+        return nxt
