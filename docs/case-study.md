@@ -50,7 +50,8 @@ The run against real E2B (2026-11-10) is summarised in the README's "Live result
 - Every outcome classified as designed: `KeyError` and `SyntaxError` as `failed/user_code_error` with `exception_type`, the busy loop as `timed_out`, and the 1 MB print capped with `stdout_truncated`.
 - After a timeout, no leftover process was found in the sandbox. This confirms E2B's documented behaviour that the command timeout kills the process.
 - **Surprise:** with internet disabled, `urlopen` doesn't fail fast. DNS resolution retries for about 20 s before `Temporary failure in name resolution`, so a short timeout reports `timed_out` instead. My first live test assumed a fast failure and was wrong; the test now asserts the security property (the request never completes) rather than the failure mode.
-- The live agent test is pending a valid OpenRouter key (the first attempt got HTTP 401). The agent handled it correctly: it stopped with `llm_error` and made no claims.
+- **Agent, live** (Claude Haiku 5.5 via OpenRouter): asked for the 20th Fibonacci number, the agent made one tool call, the sandbox printed `6765` (exit 0, 1.3 s), and the agent answered from that observed output. The run took 2 LLM steps and about 8 s end to end.
+- Before that, a malformed API key produced HTTP 401 from OpenRouter. The agent handled it as designed: it stopped with `llm_error`, `answer: null`, and made no claims.
 
 ## Lessons learned
 
