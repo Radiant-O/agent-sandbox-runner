@@ -13,13 +13,16 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
-from app.api import executions, system
+from app.api import agents, executions, system
 from app.api.system import VERSION
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging, request_id_var
 from app.core.metrics import Metrics
 from app.core.security import RateLimiter
+from app.llm.base import LLMProvider
+from app.llm.openai_compat import OpenAICompatibleProvider
 from app.sandbox.base import SandboxBackend
+from app.services.agent_service import AgentService
 from app.services.execution_service import ExecutionService, PolicyViolation
 from app.store import ExecutionStore
 
@@ -39,10 +42,16 @@ def create_app(
     settings: Settings | None = None,
     *,
     backend: SandboxBackend | None = None,
-    llm: object | None = None,
+    llm: LLMProvider | None = None,
 ) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings.LOG_LEVEL, settings.secret_values())
+    if llm is None and settings.LLM_API_KEY is not None and settings.LLM_MODEL:
+        llm = OpenAICompatibleProvider(
+            api_key=settings.LLM_API_KEY.get_secret_value(),
+            base_url=settings.LLM_BASE_URL,
+            model=settings.LLM_MODEL,
+        )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -60,7 +69,9 @@ def create_app(
         app.state.metrics = metrics
         app.state.execution_service = svc
         app.state.rate_limiter = RateLimiter(settings.RATE_LIMIT_PER_MINUTE)
-        app.state.llm = llm
+        app.state.agent_service = (
+            AgentService(llm, svc, metrics, settings) if llm is not None else None
+        )
         try:
             yield
         finally:
@@ -125,4 +136,5 @@ def create_app(
 
     app.include_router(system.router)
     app.include_router(executions.router)
+    app.include_router(agents.router)
     return app

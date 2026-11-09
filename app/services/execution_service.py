@@ -153,9 +153,18 @@ class ExecutionService:
         token = execution_id_var.set(rec.id)
         try:
             await self._execute(session, rec)
+        except asyncio.CancelledError:
+            # e.g. the agent's time budget ran out mid-execution: never leave it "running".
+            await self._finish_error(
+                rec, ErrorCategory.INTERRUPTED, "Cancelled before the execution finished."
+            )
+            raise
         finally:
             execution_id_var.reset(token)
         return rec
+
+    async def list_for_agent_run(self, agent_run_id: str, owner: str) -> list[ExecutionRecord]:
+        return [r for r in await self._store.list_by_agent_run(agent_run_id) if r.owner == owner]
 
     async def recover(self) -> int:
         n = await self._store.mark_interrupted()
