@@ -1,0 +1,49 @@
+### Variables (VS Code REST Client / JetBrains HTTP client)
+@base = http://localhost:8000
+@key = change-me-to-a-long-random-string
+
+### Health (no auth)
+GET {{base}}/health
+
+### Run code and wait for the result
+POST {{base}}/api/v1/executions?wait=true
+X-API-Key: {{key}}
+Content-Type: application/json
+
+{"code": "print(sum(range(10)))"}
+
+### Submit asynchronously (202 + Location header)
+POST {{base}}/api/v1/executions
+X-API-Key: {{key}}
+Content-Type: application/json
+
+{"code": "import time\ntime.sleep(2)\nprint('done')", "timeout_seconds": 10}
+
+### Poll an execution (replace the id)
+GET {{base}}/api/v1/executions/exe_REPLACE_ME
+X-API-Key: {{key}}
+
+### User-code failure -> status=failed, error_category=user_code_error
+POST {{base}}/api/v1/executions?wait=true
+X-API-Key: {{key}}
+Content-Type: application/json
+
+{"code": "1/0"}
+
+### Timeout -> status=timed_out
+POST {{base}}/api/v1/executions?wait=true
+X-API-Key: {{key}}
+Content-Type: application/json
+
+{"code": "while True: pass", "timeout_seconds": 3}
+
+### Agent
+POST {{base}}/api/v1/agent/run
+X-API-Key: {{key}}
+Content-Type: application/json
+
+{"task": "What is the 20th Fibonacci number? Compute it."}
+
+### Metrics
+GET {{base}}/metrics
+X-API-Key: {{key}}
