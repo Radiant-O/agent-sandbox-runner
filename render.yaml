@@ -1,0 +1,37 @@
+# Render Blueprint: one free web service built from the Dockerfile.
+# Secrets marked `sync: false` are entered in the Render dashboard on first deploy
+# and never live in this repo.
+services:
+  - type: web
+    name: agent-sandbox-runner
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: "8000"
+      # Secrets: typed into the dashboard, never committed.
+      - key: E2B_API_KEY
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      # Random key for the authenticated API (/v1/*); Render generates and stores it.
+      - key: API_KEYS
+        generateValue: true
+      # Agent model (OpenRouter)
+      - key: LLM_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: LLM_MODEL
+        value: anthropic/claude-haiku-5.5
+      # Public demo with capped spend
+      - key: DEMO_ENABLED
+        value: "true"
+      - key: TRUST_PROXY
+        value: "true"
+      - key: TRUSTED_PROXY_HOPS
+        value: "1"
+      - key: PUBLIC_REPO_URL
+        value: https://github.com/Radiant-O/agent-sandbox-runner

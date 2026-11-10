@@ -47,7 +47,7 @@ The console talks only to `/demo/*` on the same origin. Those endpoints run code
 
 1. **Policy check** (free): code ≤ 10 KB, timeout ≤ 15 s. Rejected requests cost nothing, and the agent checks policy *before* booting a sandbox.
 2. **Cloudflare Turnstile** (when `TURNSTILE_SECRET_KEY` is set): verified server-side, and fails closed.
-3. **Per-visitor limit**: 10 runs and 3 agent runs an hour, keyed on a hashed IP. `X-Forwarded-For` is honoured only with `TRUST_PROXY=true`.
+3. **Per-visitor limit**: 10 runs and 3 agent runs an hour, keyed on a hashed IP. `X-Forwarded-For` is honoured only with `TRUST_PROXY=true`, and only the entry the platform proxy appended is used, so a spoofed header cannot mint new visitors.
 4. **Global daily budget**: 300 runs and 40 agent runs per UTC day, persisted in SQLite so restarts don't reset it.
 
 The server refuses to start if the demo is enabled with sandbox internet on. Every cap is configurable; see [`.env.example`](.env.example).

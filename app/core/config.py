@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     TURNSTILE_SITE_KEY: str | None = None
     TURNSTILE_SECRET_KEY: SecretStr | None = None
     TRUST_PROXY: bool = False  # honour X-Forwarded-For (only behind a trusted proxy)
+    TRUSTED_PROXY_HOPS: int = 1  # proxies in front of the app that append to X-Forwarded-For
     PUBLIC_REPO_URL: str | None = None
 
     def api_key_list(self) -> list[str]:
