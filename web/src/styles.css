@@ -104,8 +104,14 @@ body {
 
 /* Code must read exactly as written: no ">=" -> "≥" ligatures. */
 .font-mono,
+.cm-editor .cm-content,
 code,
 pre {
   font-variant-ligatures: none;
   font-feature-settings: "liga" 0, "calt" 0;
+}
+
+/* The one atmospheric touch: light falls on the lifeline, the thing to watch. */
+.glow {
+  background-image: radial-gradient(120% 140% at 50% -40%, rgb(var(--live) / 0.1), transparent 60%);
 }

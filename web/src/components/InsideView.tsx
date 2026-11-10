@@ -51,9 +51,14 @@ export function InsideView({ status, last }: { status: DemoStatus | null; last: 
             : "Run something and its outcome lights up here."}
         </p>
 
-        <ol className="mt-6 grid gap-3 md:grid-cols-5">
+        <ol className="mt-6 grid gap-3 md:grid-cols-5 md:gap-6">
           {STAGES.map((s, i) => (
-            <li key={s.name} className="relative rounded-2xl border border-line bg-panel p-4">
+            <li
+              key={s.name}
+              className={`relative rounded-2xl border bg-panel p-4 transition-colors ${
+                last ? "border-live/40" : "border-line"
+              }`}
+            >
               <div className="flex items-baseline gap-2">
                 <span className="text-xs tabular-nums text-muted">{i + 1}</span>
                 <h3 className="font-semibold">{s.name}</h3>
@@ -64,7 +69,15 @@ export function InsideView({ status, last }: { status: DemoStatus | null; last: 
                 ))}
               </ul>
               {i < STAGES.length - 1 && (
-                <span aria-hidden className="absolute -right-2.5 top-1/2 hidden h-px w-2 bg-line md:block" />
+                <svg
+                  aria-hidden
+                  viewBox="0 0 24 12"
+                  className={`absolute -right-[1.3rem] top-1/2 hidden h-3 w-5 -translate-y-1/2 md:block ${
+                    last ? "text-live" : "text-line"
+                  }`}
+                >
+                  <path d="M0 6h20M15 1l6 5-6 5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                </svg>
               )}
             </li>
           ))}

@@ -224,3 +224,11 @@ async def test_serves_built_ui_and_spa_fallback(demo_client: ClientFactory, tmp_
     assert "console" in deep.text  # client-side route
     assert health.json()["status"] == "ok"
     assert api_404.status_code == 404
+
+
+def test_examples_are_grouped_for_the_console() -> None:
+    from app.demo.examples import EXAMPLE_GROUPS, EXAMPLES
+
+    assert {e["group"] for e in EXAMPLES} == set(EXAMPLE_GROUPS)
+    order = [EXAMPLE_GROUPS.index(str(e["group"])) for e in EXAMPLES]
+    assert order == sorted(order)  # listed group by group

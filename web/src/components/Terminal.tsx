@@ -4,10 +4,12 @@ import type { Life } from "../lib/lifecycle";
 export function Terminal({
   life,
   maxOutputBytes,
+  timeoutS,
   className = "",
 }: {
   life: Life;
   maxOutputBytes: number;
+  timeoutS?: number;
   className?: string;
 }) {
   const ref = useRef<HTMLPreElement>(null);
@@ -34,13 +36,16 @@ export function Terminal({
         aria-label="Program output"
         tabIndex={0}
       >
+        <span className="select-none text-muted">
+          <span className="text-live">sandbox</span>:~$ python main.py{"\n"}
+        </span>
         {empty ? (
           <span className="text-muted">
             {life.phase === "idle"
-              ? "Output appears here as the sandbox produces it."
+              ? "# Press Run. Output streams here as the sandbox prints it.\n"
               : running
-                ? "Waiting for output…"
-                : "The program printed nothing."}
+                ? ""
+                : "# The program printed nothing.\n"}
           </span>
         ) : (
           life.output.map((c, i) => (
@@ -49,7 +54,13 @@ export function Terminal({
             </span>
           ))
         )}
-        {running && <span className="ml-0.5 inline-block h-[1em] w-[0.5em] translate-y-[2px] animate-beat bg-live/80" />}
+        {life.phase === "done" && life.execution && (
+          <span className="select-none text-muted">
+            {"\n"}
+            {exitLine(life, timeoutS)}
+          </span>
+        )}
+        {(running || life.phase === "idle") && <span className="ml-0.5 inline-block h-[1em] w-[0.5em] translate-y-[2px] animate-beat bg-live/80" />}
       </pre>
       {truncated && (
         <div className="border-t border-line px-4 py-2 text-xs text-user">
@@ -59,4 +70,13 @@ export function Terminal({
       )}
     </div>
   );
+}
+
+function exitLine(life: Life, timeoutS?: number): string {
+  const e = life.execution;
+  if (!e) return "";
+  if (e.status === "timed_out") return `[killed at the ${timeoutS ?? e.timeout_seconds} s timeout]`;
+  if (e.status === "error") return "[platform error: the run never completed]";
+  const secs = e.duration_ms != null ? ` in ${(e.duration_ms / 1000).toFixed(2)} s` : "";
+  return `[exited with code ${e.exit_code ?? "?"}${secs}]`;
 }

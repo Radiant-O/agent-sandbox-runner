@@ -119,7 +119,7 @@ export function Lifeline({
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-line pt-2.5 text-xs text-muted">
             <span>
               {idle ? (
-                "Every run gets a fresh E2B microVM that is destroyed when it finishes."
+                "Press Run to watch it boot, run and get destroyed, drawn to scale in real milliseconds."
               ) : life.sandboxId ? (
                 <>
                   Sandbox <span className="font-mono text-fg/80">{life.sandboxId}</span>

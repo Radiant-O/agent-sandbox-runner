@@ -1,8 +1,11 @@
 """Curated snippets, one per interesting path through the system."""
 
+EXAMPLE_GROUPS: list[str] = ["Normal runs", "Broken code", "Try to break out"]
+
 EXAMPLES: list[dict[str, object]] = [
     {
         "id": "success",
+        "group": "Normal runs",
         "title": "Compute something",
         "expect": "succeeded",
         "blurb": "A normal run: fresh microVM, real exit code 0.",
@@ -16,6 +19,7 @@ EXAMPLES: list[dict[str, object]] = [
     },
     {
         "id": "stream",
+        "group": "Normal runs",
         "title": "Stream output live",
         "expect": "succeeded",
         "blurb": "Output streams to the terminal chunk by chunk as the sandbox produces it.",
@@ -30,6 +34,7 @@ EXAMPLES: list[dict[str, object]] = [
     },
     {
         "id": "runtime_error",
+        "group": "Broken code",
         "title": "Runtime error",
         "expect": "failed",
         "blurb": "User-code failure: classified as user_code_error, exception type parsed.",
@@ -43,6 +48,7 @@ EXAMPLES: list[dict[str, object]] = [
     },
     {
         "id": "syntax_error",
+        "group": "Broken code",
         "title": "Syntax error",
         "expect": "failed",
         "blurb": "Never runs; the interpreter rejects it inside the sandbox.",
@@ -51,6 +57,7 @@ EXAMPLES: list[dict[str, object]] = [
     },
     {
         "id": "timeout",
+        "group": "Try to break out",
         "title": "Infinite loop",
         "expect": "timed_out",
         "blurb": "Runs until the 5 s timeout. The sandbox is killed; partial output is kept.",
@@ -64,6 +71,7 @@ EXAMPLES: list[dict[str, object]] = [
     },
     {
         "id": "flood",
+        "group": "Try to break out",
         "title": "Output flood",
         "expect": "succeeded",
         "blurb": "Prints ~1 MB. The server keeps 64 KB and flags it as truncated.",
@@ -72,6 +80,7 @@ EXAMPLES: list[dict[str, object]] = [
     },
     {
         "id": "network",
+        "group": "Try to break out",
         "title": "Reach the internet",
         "expect": "timed_out",
         "blurb": "Egress is blocked. DNS hangs until the timeout: the request never leaves.",
@@ -85,6 +94,7 @@ EXAMPLES: list[dict[str, object]] = [
     },
     {
         "id": "secrets",
+        "group": "Try to break out",
         "title": "Look for secrets",
         "expect": "succeeded",
         "blurb": "The sandbox environment contains no server keys: nothing to steal.",

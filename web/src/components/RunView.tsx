@@ -9,6 +9,32 @@ import { Notice, type NoticeState } from "./Notice";
 import { Terminal } from "./Terminal";
 import { Verdict } from "./Verdict";
 
+const EXPECT_TEXT: Record<string, string> = {
+  succeeded: "exit 0",
+  failed: "fails",
+  timed_out: "times out",
+  error: "errors",
+};
+
+const NARRATION: Record<Life["phase"], string> = {
+  idle: "",
+  queued: "Waiting for a free sandbox slot",
+  creating: "Booting a fresh microVM",
+  uploading: "Uploading main.py",
+  running: "Running main.py",
+  killing: "Destroying the microVM",
+  done: "",
+};
+
+function groupExamples(examples: Example[]): [string, Example[]][] {
+  const out = new Map<string, Example[]>();
+  for (const ex of examples) {
+    const g = ex.group ?? "Examples";
+    out.set(g, [...(out.get(g) ?? []), ex]);
+  }
+  return [...out.entries()];
+}
+
 const EXPECT_DOT: Record<string, string> = {
   succeeded: "bg-ok",
   failed: "bg-user",
@@ -135,37 +161,54 @@ export function RunView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5 px-4 pb-5 sm:px-6 lg:px-8">
-      <section aria-label="Sandbox lifecycle" className="rounded-2xl border border-line bg-panel px-5 py-4">
-        <Lifeline life={life} />
+      <section aria-label="Sandbox lifecycle" className="glow rounded-2xl border border-line bg-panel px-5 pb-4 pt-5">
+        <RunHeadline life={life} bootAvgMs={status?.metrics.sandbox_create_ms_avg ?? null} />
+        <div className="mt-4">
+          <Lifeline life={life} />
+        </div>
       </section>
 
       {notice && <Notice notice={notice} onClose={() => setNotice(null)} />}
 
       <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[14.5rem_minmax(0,1fr)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
         <nav aria-label="Examples" className="scrollbar-thin min-h-0 min-w-0 lg:overflow-y-auto">
-          <h2 className="mb-2 px-1 text-sm font-medium text-muted">Try a scenario</h2>
-          <ul className="scrollbar-thin flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:gap-0.5 lg:overflow-visible">
-            {examples.map((ex) => {
-              const on = ex.id === selected;
-              return (
-                <li key={ex.id} className="shrink-0">
-                  <button
-                    onClick={() => pick(ex)}
-                    aria-pressed={on}
-                    className={`group w-full rounded-xl px-3 py-2.5 text-left transition-colors ${
-                      on ? "bg-raised" : "hover:bg-panel"
-                    }`}
-                  >
-                    <span className="flex items-center gap-2 text-sm font-medium">
-                      <span className={`h-1.5 w-1.5 rounded-full ${EXPECT_DOT[ex.expect] ?? "bg-muted"}`} />
-                      {ex.title}
-                    </span>
-                    <span className="mt-0.5 hidden text-xs leading-snug text-muted lg:block">{ex.blurb}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <div className="scrollbar-thin flex gap-4 overflow-x-auto pb-1 lg:flex-col lg:gap-5 lg:overflow-visible">
+            {groupExamples(examples).map(([group, items]) => (
+              <div key={group} className="shrink-0">
+                <h2 className="mb-1.5 hidden px-3 text-xs font-medium text-muted lg:block">{group}</h2>
+                <ul className="flex gap-1 lg:flex-col lg:gap-0.5">
+                  {items.map((ex) => {
+                    const on = ex.id === selected;
+                    return (
+                      <li key={ex.id} className="shrink-0">
+                        <button
+                          onClick={() => pick(ex)}
+                          aria-pressed={on}
+                          className={`relative w-full rounded-xl px-3 py-2 text-left transition-colors ${
+                            on ? "bg-raised" : "hover:bg-panel"
+                          }`}
+                        >
+                          {on && (
+                            <span aria-hidden className="absolute inset-y-2 left-0 hidden w-0.5 rounded-full bg-live lg:block" />
+                          )}
+                          <span className="flex items-center gap-2 whitespace-nowrap text-sm">
+                            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${EXPECT_DOT[ex.expect] ?? "bg-muted"}`} />
+                            <span className={on ? "font-medium text-fg" : "text-fg/85"}>{ex.title}</span>
+                            <span className="ml-auto hidden pl-2 text-[0.7rem] text-muted lg:inline">
+                              {EXPECT_TEXT[ex.expect]}
+                            </span>
+                          </span>
+                          {on && (
+                            <span className="mt-1 hidden pl-3.5 text-xs leading-snug text-muted lg:block">{ex.blurb}</span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
         </nav>
 
         <section aria-label="Code" className="flex min-h-[18rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-line bg-panel">
@@ -210,7 +253,7 @@ export function RunView({
               </span>
             </span>
           </div>
-          <Terminal life={life} maxOutputBytes={status?.limits.max_output_bytes ?? 65536} className="flex-1" />
+          <Terminal life={life} timeoutS={timeout} maxOutputBytes={status?.limits.max_output_bytes ?? 65536} className="flex-1" />
         </section>
       </div>
 
@@ -240,4 +283,39 @@ export function noticeFor(err: unknown): NoticeState {
     return { tone: "infra", text: err.message };
   }
   return { tone: "infra", text: "Something went wrong. Try again." };
+}
+
+function RunHeadline({ life, bootAvgMs }: { life: Life; bootAvgMs: number | null }) {
+  const e = life.execution;
+  if (life.phase === "idle") {
+    return (
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
+        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+          Your code gets its own microVM. It lives for one run.
+        </h1>
+        <p className="text-sm text-muted">
+          {bootAvgMs ? `Boots in about ${Math.round(bootAvgMs)} ms on E2B` : "Isolated by E2B"}
+        </p>
+      </div>
+    );
+  }
+  const text =
+    life.phase === "done"
+      ? e?.status === "succeeded"
+        ? "Finished. The microVM is gone."
+        : e?.status === "error"
+          ? "The platform failed this run. Not your code."
+          : "Run ended. The microVM is gone."
+      : NARRATION[life.phase];
+  return (
+    <div className="flex items-center gap-3" aria-live="polite">
+      <span
+        className={`h-2 w-2 shrink-0 rounded-full ${life.phase === "done" ? "bg-muted" : "animate-beat bg-live"}`}
+      />
+      <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+        {text}
+        {life.phase !== "done" && <span className="text-muted">…</span>}
+      </h1>
+    </div>
+  );
 }

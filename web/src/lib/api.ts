@@ -51,6 +51,7 @@ export interface AgentRun {
 
 export interface Example {
   id: string;
+  group?: string;
   title: string;
   expect: Status;
   blurb: string;
