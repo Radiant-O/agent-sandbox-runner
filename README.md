@@ -2,6 +2,8 @@
 
 Secure Python execution for AI agents, built on [E2B](https://e2b.dev) cloud sandboxes.
 
+**Live demo: [agent-sandbox-runner.onrender.com](https://agent-sandbox-runner.onrender.com)**. No sign-up needed. Runs real E2B microVMs, with per-visitor and daily limits.
+
 A FastAPI service that takes untrusted Python, from a developer or from an LLM agent, and runs it inside isolated E2B sandboxes. It manages the whole sandbox lifecycle and returns structured, classified results. A bounded, tool-calling Claude agent uses **the same** execution path, so agent-generated code gets the same policy, limits and audit trail as direct API calls.
 
 It also ships a **live console**: a public demo where anyone can run code or the agent and watch each microVM boot, run and get destroyed, timed from real backend events. The browser never holds a credential.
