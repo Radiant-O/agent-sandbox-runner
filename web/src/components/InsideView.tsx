@@ -56,7 +56,7 @@ export function InsideView({ status, last }: { status: DemoStatus | null; last: 
             <li
               key={s.name}
               className={`relative rounded-2xl border bg-panel p-4 transition-colors ${
-                last ? "border-live/40" : "border-line"
+                last ? "border-fg/30" : "border-line"
               }`}
             >
               <div className="flex items-baseline gap-2">
@@ -73,7 +73,7 @@ export function InsideView({ status, last }: { status: DemoStatus | null; last: 
                   aria-hidden
                   viewBox="0 0 24 12"
                   className={`absolute -right-[1.3rem] top-1/2 hidden h-3 w-5 -translate-y-1/2 md:block ${
-                    last ? "text-live" : "text-line"
+                    last ? "text-fg/60" : "text-line"
                   }`}
                 >
                   <path d="M0 6h20M15 1l6 5-6 5" fill="none" stroke="currentColor" strokeWidth="1.5" />

@@ -161,7 +161,7 @@ export function RunView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5 px-4 pb-5 sm:px-6 lg:px-8">
-      <section aria-label="Sandbox lifecycle" className="glow rounded-2xl border border-line bg-panel px-5 pb-4 pt-5">
+      <section aria-label="Sandbox lifecycle" className="rounded-2xl border border-line bg-panel px-5 pb-4 pt-5">
         <RunHeadline life={life} bootAvgMs={status?.metrics.sandbox_create_ms_avg ?? null} />
         <div className="mt-4">
           <Lifeline life={life} />
@@ -188,9 +188,6 @@ export function RunView({
                             on ? "bg-raised" : "hover:bg-panel"
                           }`}
                         >
-                          {on && (
-                            <span aria-hidden className="absolute inset-y-2 left-0 hidden w-0.5 rounded-full bg-live lg:block" />
-                          )}
                           <span className="flex items-center gap-2 whitespace-nowrap text-sm">
                             <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${EXPECT_DOT[ex.expect] ?? "bg-muted"}`} />
                             <span className={on ? "font-medium text-fg" : "text-fg/85"}>{ex.title}</span>
@@ -222,7 +219,7 @@ export function RunView({
                 max={maxTimeout}
                 value={timeout}
                 onChange={(e) => setTimeoutS(Number(e.target.value))}
-                className="w-20 accent-[rgb(var(--live))]"
+                className="w-20 accent-[rgb(var(--fg))]"
                 aria-valuetext={`${timeout} seconds`}
               />
               <span className="w-7 tabular-nums text-fg">{timeout}s</span>

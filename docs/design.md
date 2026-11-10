@@ -1,4 +1,4 @@
-# Agent Sandbox Runner — Design
+# Agent Sandbox Runner: design
 
 Status: approved 2026-11-09. This is the spec the implementation plan follows. The original brief is in [brief.md](brief.md).
 

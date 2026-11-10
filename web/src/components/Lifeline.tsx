@@ -33,11 +33,14 @@ export function Lifeline({
   life,
   compact = false,
   hideBoot = false,
+  outcome,
 }: {
   life: Life;
   compact?: boolean;
   /** Agent runs reuse one sandbox: later calls don't boot or destroy. */
   hideBoot?: boolean;
+  /** Outcome known from elsewhere (agent tool results carry no execution record). */
+  outcome?: Status | null;
 }) {
   const activeSeg = ACTIVE_SEG[life.phase];
   const now = useNow(activeSeg !== undefined);
@@ -55,12 +58,14 @@ export function Lifeline({
   const known = segs.map((s) => value[s] ?? 0);
   const total = known.reduce((a, b) => a + b, 0);
   const floor = Math.max(total * 0.05, 1);
-  const status = life.execution?.status;
-  const runColor = status ? OUTCOME_BG[status] : "bg-live";
+  const status = life.execution?.status ?? outcome ?? undefined;
+  const runColor = status ? OUTCOME_BG[status] : "bg-fg/55";
   const idle = life.phase === "idle";
 
   const colorOf = (s: Seg, isActive: boolean) =>
-    s === "run" ? (isActive ? "bg-live" : runColor) : s === "create" ? "bg-live/80" : "bg-live/45";
+    // Orange only while a phase is live; finished plumbing phases settle to gray,
+    // and the run segment takes its outcome color.
+    isActive ? "bg-live" : s === "run" ? runColor : s === "create" ? "bg-fg/55" : "bg-fg/30";
 
   return (
     <div className={compact ? "space-y-1.5" : "space-y-3"} aria-live="polite">

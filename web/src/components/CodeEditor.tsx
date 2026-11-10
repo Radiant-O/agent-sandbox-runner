@@ -6,11 +6,12 @@ import CodeMirror from "@uiw/react-codemirror";
 import { useMemo } from "react";
 
 const highlight = HighlightStyle.define([
-  { tag: [t.keyword, t.controlKeyword, t.operatorKeyword], color: "rgb(var(--late))" },
-  { tag: [t.string, t.special(t.string)], color: "rgb(var(--ok))" },
-  { tag: [t.number, t.bool, t.null], color: "rgb(var(--user))" },
+  // Restrained: structure by weight, not by the outcome colors (green/yellow/blue/red mean results).
+  { tag: [t.keyword, t.controlKeyword, t.operatorKeyword], color: "rgb(var(--fg))", fontWeight: "600" },
+  { tag: [t.string, t.special(t.string)], color: "rgb(var(--code-str))" },
+  { tag: [t.number, t.bool, t.null], color: "rgb(var(--code-num))" },
   { tag: [t.comment], color: "rgb(var(--muted))", fontStyle: "italic" },
-  { tag: [t.function(t.variableName), t.function(t.propertyName)], color: "rgb(var(--live))" },
+  { tag: [t.function(t.variableName), t.function(t.propertyName)], color: "rgb(var(--fg))" },
   { tag: [t.definition(t.variableName), t.className], color: "rgb(var(--fg))", fontWeight: "600" },
 ]);
 

@@ -7,32 +7,37 @@
    live = something is happening right now. */
 :root,
 [data-theme="dark"] {
-  --ink: 14 26 34; /* #0E1A22 */
-  --panel: 19 36 48; /* #132430 */
-  --raised: 26 47 61;
-  --line: 34 57 74; /* #22394A */
-  --fg: 230 238 242; /* #E6EEF2 */
-  --muted: 138 163 178; /* #8AA3B2 */
-  --ok: 95 212 164; /* #5FD4A4 */
-  --user: 240 180 76; /* #F0B44C */
-  --late: 182 156 255; /* #B69CFF */
-  --infra: 255 122 107; /* #FF7A6B */
-  --live: 143 216 245; /* #8FD8F5 */
+  /* Lab instrument: true black, pure grays. Color appears only when it means something. */
+  --ink: 0 0 0; /* #000000 */
+  --panel: 10 10 10; /* #0A0A0A */
+  --raised: 24 24 24; /* #181818 */
+  --line: 40 40 40; /* #282828 */
+  --fg: 236 236 236; /* #ECECEC */
+  --muted: 140 140 140; /* #8C8C8C, 7:1 on black */
+  --ok: 62 207 142; /* #3ECF8E succeeded */
+  --user: 242 201 76; /* #F2C94C your code failed */
+  --late: 103 183 255; /* #67B7FF timed out */
+  --infra: 255 85 85; /* #FF5555 platform failed */
+  --live: 255 122 26; /* #FF7A1A the one accent: happening right now */
+  --code-str: 166 196 160;
+  --code-num: 222 178 120;
   color-scheme: dark;
 }
 
 [data-theme="light"] {
-  --ink: 240 244 246;
+  --ink: 250 250 250;
   --panel: 255 255 255;
-  --raised: 232 238 241;
-  --line: 205 216 223;
-  --fg: 16 33 43;
-  --muted: 83 106 120;
-  --ok: 18 140 96;
-  --user: 176 112 0;
-  --late: 109 76 214;
-  --infra: 205 64 48;
-  --live: 0 122 168;
+  --raised: 238 238 238;
+  --line: 218 218 218;
+  --fg: 12 12 12;
+  --muted: 98 98 98;
+  --ok: 18 140 86;
+  --user: 160 112 0;
+  --late: 18 104 196;
+  --infra: 205 40 40;
+  --live: 214 84 0;
+  --code-str: 60 110 60;
+  --code-num: 150 90 10;
   color-scheme: light;
 }
 
@@ -44,17 +49,15 @@ body,
 
 body {
   @apply bg-ink font-sans text-fg antialiased;
-  font-feature-settings: "ss01", "cv11";
 }
 
 ::selection {
-  background: rgb(var(--live) / 0.3);
+  background: rgb(var(--fg) / 0.22);
 }
 
 :focus-visible {
   outline: 2px solid rgb(var(--live));
   outline-offset: 2px;
-  border-radius: 6px;
 }
 
 .scrollbar-thin {
@@ -82,7 +85,7 @@ body {
   outline: none !important;
 }
 .cm-scroller {
-  font-family: "JetBrains Mono", ui-monospace, monospace !important;
+  font-family: "IBM Plex Mono", ui-monospace, monospace !important;
   line-height: 1.65 !important;
 }
 .cm-gutters {
@@ -92,14 +95,14 @@ body {
 }
 .cm-activeLine,
 .cm-activeLineGutter {
-  background: rgb(var(--live) / 0.05) !important;
+  background: rgb(var(--fg) / 0.04) !important;
 }
 .cm-cursor {
   border-left-color: rgb(var(--live)) !important;
 }
 .cm-selectionBackground,
 .cm-focused .cm-selectionBackground {
-  background: rgb(var(--live) / 0.18) !important;
+  background: rgb(var(--fg) / 0.16) !important;
 }
 
 /* Code must read exactly as written: no ">=" -> "≥" ligatures. */
@@ -111,7 +114,3 @@ pre {
   font-feature-settings: "liga" 0, "calt" 0;
 }
 
-/* The one atmospheric touch: light falls on the lifeline, the thing to watch. */
-.glow {
-  background-image: radial-gradient(120% 140% at 50% -40%, rgb(var(--live) / 0.1), transparent 60%);
-}

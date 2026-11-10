@@ -19,10 +19,12 @@ export default {
         late: v("late"),
         infra: v("infra"),
         live: v("live"),
+        "code-str": v("code-str"),
+        "code-num": v("code-num"),
       },
       fontFamily: {
-        sans: ['"Instrument Sans"', "system-ui", "sans-serif"],
-        mono: ['"JetBrains Mono"', "ui-monospace", "monospace"],
+        sans: ['"IBM Plex Sans"', "system-ui", "sans-serif"],
+        mono: ['"IBM Plex Mono"', "ui-monospace", "monospace"],
       },
       fontSize: {
         // modular scale ~1.2, 16px base
@@ -33,6 +35,18 @@ export default {
         xl: ["1.44rem", "1.9rem"],
         "2xl": ["1.728rem", "2.1rem"],
         "3xl": ["2.488rem", "2.7rem"],
+      },
+      // Radius stance: square. An instrument, not a soft card stack.
+      borderRadius: {
+        none: "0",
+        sm: "0",
+        DEFAULT: "0",
+        md: "0",
+        lg: "0",
+        xl: "0",
+        "2xl": "0",
+        "3xl": "0",
+        full: "0",
       },
       keyframes: {
         pulse: { "0%,100%": { opacity: "1" }, "50%": { opacity: ".35" } },

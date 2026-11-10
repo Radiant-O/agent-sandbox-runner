@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { DemoStatus } from "../lib/api";
 import { ms } from "../lib/format";
 
@@ -34,8 +35,8 @@ export function TopBar({
     <header className="flex flex-wrap items-center gap-x-6 gap-y-3 px-4 py-4 sm:px-6 lg:px-8">
       <a href="/" className="flex items-center gap-2.5" aria-label="Agent Sandbox Runner home">
         <svg viewBox="0 0 32 32" className="h-7 w-7" aria-hidden>
-          <rect width="32" height="32" rx="8" className="fill-panel" />
-          <path d="M6 16h5l3-7 4 14 3-7h5" fill="none" stroke="rgb(var(--live))" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          <rect width="32" height="32" className="fill-panel" />
+          <path d="M5 17h6l3-8 4 15 3-7h6" fill="none" stroke="rgb(var(--live))" strokeWidth="2.6" strokeLinejoin="miter" />
         </svg>
         <span className="text-[1.05rem] font-semibold tracking-tight">Agent Sandbox Runner</span>
       </a>
@@ -81,27 +82,71 @@ export function TopBar({
               </span>
             </div>
             <div className="mt-1 h-1 overflow-hidden rounded-full bg-line">
-              <div className={`h-full rounded-full ${pct > 15 ? "bg-live" : "bg-user"}`} style={{ width: `${pct}%` }} />
+              <div className={`h-full rounded-full ${pct > 15 ? "bg-fg/70" : "bg-user"}`} style={{ width: `${pct}%` }} />
             </div>
           </div>
         )}
 
-        <button onClick={onHistory} className="text-muted hover:text-fg">
-          History
-        </button>
-        <button
-          onClick={onTheme}
-          className="text-muted hover:text-fg"
-          aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
-        >
-          {theme === "dark" ? "Light" : "Dark"}
-        </button>
-        {status?.repo_url && (
-          <a href={status.repo_url} className="text-muted hover:text-fg" target="_blank" rel="noreferrer">
-            Source
-          </a>
-        )}
+        <div className="flex items-center gap-1">
+          <IconButton label="Run history" onClick={onHistory}>
+            <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+            <path d="M3 3v5h5M12 7v5l3 2" />
+          </IconButton>
+          <IconButton label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`} onClick={onTheme}>
+            {theme === "dark" ? (
+              <>
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+              </>
+            ) : (
+              <path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z" />
+            )}
+          </IconButton>
+          {status?.repo_url && (
+            <IconButton label="Source code" href={status.repo_url}>
+              <path d="M8 6l-6 6 6 6M16 6l6 6-6 6" />
+            </IconButton>
+          )}
+        </div>
       </div>
     </header>
+  );
+}
+
+function IconButton({
+  label,
+  onClick,
+  href,
+  children,
+}: {
+  label: string;
+  onClick?: () => void;
+  href?: string;
+  children: ReactNode;
+}) {
+  const cls =
+    "grid h-9 w-9 place-items-center text-muted transition-colors hover:bg-panel hover:text-fg";
+  const icon = (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-[18px] w-[18px]"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="square"
+      strokeLinejoin="miter"
+      aria-hidden
+    >
+      {children}
+    </svg>
+  );
+  return href ? (
+    <a href={href} target="_blank" rel="noreferrer" aria-label={label} title={label} className={cls}>
+      {icon}
+    </a>
+  ) : (
+    <button type="button" onClick={onClick} aria-label={label} title={label} className={cls}>
+      {icon}
+    </button>
   );
 }

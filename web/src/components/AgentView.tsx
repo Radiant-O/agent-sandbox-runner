@@ -129,7 +129,7 @@ export function AgentView({
             rows={4}
             maxLength={1000}
             placeholder="How many primes are there below 100,000?"
-            className="mt-3 w-full resize-none rounded-xl border border-line bg-ink px-3 py-2.5 text-sm placeholder:text-muted/70 focus:border-live/60 focus:outline-none"
+            className="mt-3 w-full resize-none rounded-xl border border-line bg-ink px-3 py-2.5 text-sm placeholder:text-muted/70 focus:border-fg/50 focus:outline-none"
           />
           <button
             type="submit"
@@ -232,7 +232,7 @@ function Item({ item, run }: { item: TranscriptItem; run: AgentRun | null }) {
             {item.code}
           </pre>
           <div className="border-t border-line px-4 py-3">
-            <Lifeline life={item.life} compact hideBoot={item.life.createMs == null} />
+            <Lifeline life={item.life} outcome={status} compact hideBoot={item.life.createMs == null} />
             <div className="mt-2.5 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
               {status ? (
                 <span className={`font-medium ${STATUS_TONE[status]}`}>{STATUS_TEXT[status]}</span>

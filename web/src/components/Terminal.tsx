@@ -37,7 +37,7 @@ export function Terminal({
         tabIndex={0}
       >
         <span className="select-none text-muted">
-          <span className="text-live">sandbox</span>:~$ python main.py{"\n"}
+          <span className="text-fg/80">sandbox</span>:~$ python main.py{"\n"}
         </span>
         {empty ? (
           <span className="text-muted">
