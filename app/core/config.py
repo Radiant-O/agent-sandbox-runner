@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     TURNSTILE_SECRET_KEY: SecretStr | None = None
     TRUST_PROXY: bool = False  # honour X-Forwarded-For (only behind a trusted proxy)
     TRUSTED_PROXY_HOPS: int = 1  # proxies in front of the app that append to X-Forwarded-For
+    CLIENT_IP_HEADER: str | None = None  # edge-set client IP header, e.g. CF-Connecting-IP
     PUBLIC_REPO_URL: str | None = None
 
     def api_key_list(self) -> list[str]:

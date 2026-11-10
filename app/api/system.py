@@ -12,6 +12,7 @@ router = APIRouter(tags=["system"])
 
 
 @router.get("/health", summary="Liveness check (no auth)")
+@router.head("/health", include_in_schema=False)
 async def health() -> dict[str, str]:
     return {"status": "ok", "version": VERSION}
 

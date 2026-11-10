@@ -71,11 +71,16 @@ def get_demo(request: Request) -> DemoContext:
 Demo = Annotated[DemoContext, Depends(get_demo)]
 
 
-def client_ip(request: Request, trust_proxy: bool, hops: int = 1) -> str:
-    """The visitor's address. Behind `hops` trusted proxies, each appends to
-    X-Forwarded-For, so the real client is `hops` entries from the right; anything
-    further left was supplied by the client and cannot be trusted."""
+def client_ip(request: Request, trust_proxy: bool, hops: int = 1, header: str | None = None) -> str:
+    """The visitor's address. `header` names a single-IP header the edge proxy always
+    overwrites (Cloudflare's CF-Connecting-IP), which wins when present. Otherwise,
+    behind `hops` trusted proxies that each append to X-Forwarded-For, the real
+    client is `hops` entries from the right; anything further left was supplied by
+    the client and cannot be trusted."""
     if trust_proxy:
+        edge = request.headers.get(header, "").strip() if header else ""
+        if edge:
+            return edge
         fwd = request.headers.get("X-Forwarded-For", "")
         parts = [p.strip() for p in fwd.split(",") if p.strip()]
         if parts:
@@ -109,7 +114,8 @@ async def _guard_spend(
     per_hour: int,
     daily_cap: int,
 ) -> None:
-    ip = client_ip(request, ctx.settings.TRUST_PROXY, ctx.settings.TRUSTED_PROXY_HOPS)
+    s = ctx.settings
+    ip = client_ip(request, s.TRUST_PROXY, s.TRUSTED_PROXY_HOPS, s.CLIENT_IP_HEADER)
     if ctx.turnstile is not None:
         if not token:
             raise api_error(403, "turnstile_required", "Bot check required.")

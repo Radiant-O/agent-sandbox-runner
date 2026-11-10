@@ -143,3 +143,9 @@ async def test_openapi_has_execution_paths(client_for: ClientFactory) -> None:
         spec = (await c.get("/openapi.json")).json()
     assert "/api/v1/executions" in spec["paths"]
     assert "/api/v1/executions/{execution_id}" in spec["paths"]
+
+
+async def test_health_answers_head_for_uptime_monitors(client_for: ClientFactory) -> None:
+    async with client_for() as c:
+        r = await c.head("/health")
+    assert r.status_code == 200
