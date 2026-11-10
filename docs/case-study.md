@@ -1,6 +1,8 @@
 # Engineering Case Study: Agent Sandbox Runner
 
-> Status: draft. Sections are filled in from real notes taken during the build. Nothing here is invented; anything not yet observed live is marked as pending.
+> Written from notes taken during the build. Every number and failure below was observed on real E2B sandboxes or on the deployed demo.
+>
+> **Live demo:** [agent-sandbox-runner.onrender.com](https://agent-sandbox-runner.onrender.com)
 
 ## Context
 
@@ -62,6 +64,22 @@ The run against real E2B (2026-11-10) is summarised in the README's "Live result
 - **Windows found an SPA bug.** Starlette passes static paths with OS separators, so `api1
 ope` didn't match the `api/` prefix and unknown API routes were served the UI. A test caught it.
 
+## Deploying a public demo that spends real money
+
+The demo lets strangers start microVMs and call an LLM on my accounts, so the deployment was a security problem before it was a hosting problem.
+
+- **Credentials stay server-side.** The browser calls `/demo/*`, which uses the server's own keys. E2B and OpenRouter keys are environment secrets on the host and never reach the client or the repo.
+- **Three layers of spend control.** Per-visitor hourly limits (10 runs, 3 agent runs), a shared daily cap (300 runs, 40 agent runs) that falls back to recorded runs when exhausted, and a credit limit on the LLM key as the hard stop. The daily counter lives on the host's ephemeral disk and resets on a redeploy, which is exactly why the provider-side limit exists.
+- **The per-visitor limit was spoofable, and I found it before launch.** Behind a proxy, the app keyed visitors on the *first* `X-Forwarded-For` entry. That entry is whatever the client sends; proxies only append. A script could mint a new identity per request. The fix reads the address the edge proxy controls: Render serves through Cloudflare, which overwrites `CF-Connecting-IP`, with the proxy-appended (rightmost) `X-Forwarded-For` entry as the fallback.
+- **Verified on the live site, not just in tests.** Nine requests with forged `X-Forwarded-For` headers were all counted as one visitor and blocked at the hourly limit. Forging `CF-Connecting-IP` itself was rejected by Cloudflare (error 1000) before reaching the app. To prove the key was not collapsing everyone into one shared proxy IP, I sent a request from a second real address, an E2B sandbox with internet enabled, while my own address was blocked. It was accepted.
+- **Uptime monitors probe with `HEAD`.** FastAPI's `GET` route answered `HEAD /health` with 404, which a monitor would report as an outage. `/health` now answers both.
+- **Hosting under a no-card constraint.** Hugging Face Spaces now requires a paid plan for Docker Spaces, so the demo runs on Render's free web service from the same Dockerfile CI builds, defined in `render.yaml`. The cost is a cold start of about a minute after 15 idle minutes, which an external uptime ping avoids.
+
 ## Lessons learned
 
-Pending: to be written after the live runs.
+1. **Classify failures by who is at fault, not by exception type.** The SDK's exception hierarchy mixes infrastructure failures into `TimeoutException`. The useful question is "did the user's code use up its time budget?", and answering it needed the timing, not the class.
+2. **Read the dependency, not just its docs.** Three of the most important fixes (the timeout hierarchy, `retain_output`, and gRPC `CANCELED` mapping) came from reading the installed E2B SDK source.
+3. **Test the security property, not the failure mode.** With internet disabled, the network call hung on DNS instead of failing fast. The right assertion is "the request never completes", which holds either way.
+4. **Spend checks belong before the expensive step.** Validating the agent's requested timeout after booting a microVM was correct but wasteful. Policy now runs before any sandbox exists.
+5. **A limit you have not attacked is a limit you hope works.** The per-visitor limit passed every unit test and was still bypassable through one header. Forging requests against the live deployment, from two real addresses, is what made it trustworthy.
+6. **One sandbox per run is the right default, and its cost is visible.** About 600 ms of boot time per execution is the price of never sharing state between callers. Pooling pre-warmed sandboxes is the obvious next step, and the metric to judge it by is already exported.
