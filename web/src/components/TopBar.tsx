@@ -74,11 +74,14 @@ export function TopBar({
         )}
 
         {b && (
-          <div className="hidden w-40 lg:block" title={`Resets ${new Date(status!.budget.resets_at).toLocaleTimeString()}`}>
+          <div
+            className="hidden w-44 lg:block"
+            title={`Shared by all visitors. Resets at ${new Date(status!.budget.resets_at).toLocaleTimeString()}`}
+          >
             <div className="flex justify-between text-xs text-muted">
-              <span>Today's runs</span>
+              <span>Demo runs left today</span>
               <span className="tabular-nums">
-                {b.remaining}/{b.total}
+                {b.remaining} of {b.total}
               </span>
             </div>
             <div className="mt-1 h-1 overflow-hidden rounded-full bg-line">
