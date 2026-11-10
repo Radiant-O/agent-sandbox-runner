@@ -10,3 +10,21 @@ export function inline(text: string): ReactNode {
     return <Fragment key={i}>{part}</Fragment>;
   });
 }
+
+/** Model text with ```fenced``` code blocks rendered as code; everything else via inline(). */
+export function rich(text: string): ReactNode {
+  const parts = text.split(/```[^\n`]*\n?([\s\S]*?)(?:```|$)/g);
+  return parts.map((part, i) => {
+    if (i % 2 === 1)
+      return (
+        <pre
+          key={i}
+          className="scrollbar-thin my-3 max-h-72 overflow-auto whitespace-pre rounded-lg bg-ink px-3 py-2.5 font-mono text-[0.8rem] leading-relaxed text-fg/90"
+        >
+          {part.replace(/\n$/, "")}
+        </pre>
+      );
+    const trimmed = part.replace(/^\n+|\n+$/g, "");
+    return trimmed ? <span key={i} className="whitespace-pre-wrap">{inline(trimmed)}</span> : null;
+  });
+}

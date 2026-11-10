@@ -1,5 +1,6 @@
 import json
 from collections.abc import AsyncIterator
+from typing import Any
 
 import pytest
 
@@ -8,7 +9,7 @@ from app.core.metrics import Metrics
 from app.llm.base import LLMError, LLMTurn, ToolCall
 from app.sandbox.base import RunOutput
 from app.services.agent_service import AgentService
-from app.services.execution_service import ExecutionService
+from app.services.execution_service import ExecutionPolicy, ExecutionService
 from app.store import ExecutionStore
 from tests.fakes import FakeSandboxBackend, ScriptedLLM
 
@@ -257,3 +258,23 @@ async def test_policy_rejection_does_not_boot_a_sandbox(
     agent, backend, _ = build(settings, store, llm)
     await agent.run("x", "o")
     assert backend.created == 0  # rejected by policy before spending on a microVM
+
+
+async def test_tool_schema_states_the_real_timeout_limits(
+    settings: Settings, store: ExecutionStore
+) -> None:
+    llm = ScriptedLLM([say("ok"), say("ok")])
+    agent, _, _ = build(settings, store, llm)
+    await agent.run("x", "o")
+    await agent.run("x", "o", policy=ExecutionPolicy(1000, 7, 3))
+
+    def timeout_param(tools: list[dict[str, Any]]) -> dict[str, Any]:
+        p: dict[str, Any] = tools[0]["function"]["parameters"]["properties"]["timeout_seconds"]
+        return p
+
+    default = timeout_param(llm.tools[0])
+    assert default["minimum"] == 1
+    assert default["maximum"] == settings.MAX_TIMEOUT_SECONDS
+    assert str(settings.MAX_TIMEOUT_SECONDS) in default["description"]
+    custom = timeout_param(llm.tools[1])
+    assert custom["maximum"] == 7 and "7" in custom["description"]

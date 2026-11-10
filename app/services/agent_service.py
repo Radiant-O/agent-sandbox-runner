@@ -42,32 +42,44 @@ Variables persist only within a single call, files persist across calls within t
 
 Base your final answer ONLY on tool results you have actually observed. If execution
 failed, timed out, or never ran, say so plainly. Never claim code ran successfully
-unless a tool result shows status "succeeded"."""
+unless a tool result shows status "succeeded".
 
-TOOLS: list[dict[str, Any]] = [
-    {
-        "type": "function",
-        "function": {
-            "name": TOOL_NAME,
-            "description": (
-                "Run a Python 3 script in an isolated sandbox without internet access. "
-                "Returns JSON with status (succeeded|failed|timed_out|error), exit_code, "
-                "stdout, stderr and exception_type."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "code": {"type": "string", "description": "Complete Python script."},
-                    "timeout_seconds": {
-                        "type": "integer",
-                        "description": "Optional timeout in seconds.",
+The user already sees every script you ran and its output, so do not repeat the code
+in your final answer. Answer in a few plain sentences; quote key numbers from the output."""
+
+
+def tools_for(policy: ExecutionPolicy) -> list[dict[str, Any]]:
+    """The tool schema, stating the real limits so the model doesn't waste a step on them."""
+    lo, hi = 1, policy.max_timeout_seconds
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": TOOL_NAME,
+                "description": (
+                    "Run a Python 3 script in an isolated sandbox without internet access. "
+                    "Returns JSON with status (succeeded|failed|timed_out|error), exit_code, "
+                    "stdout, stderr and exception_type."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "code": {"type": "string", "description": "Complete Python script."},
+                        "timeout_seconds": {
+                            "type": "integer",
+                            "minimum": lo,
+                            "maximum": hi,
+                            "description": (
+                                f"Optional timeout in seconds, {lo} to {hi}. "
+                                f"Defaults to {min(policy.default_timeout_seconds, hi)}."
+                            ),
+                        },
                     },
+                    "required": ["code"],
                 },
-                "required": ["code"],
             },
-        },
-    }
-]
+        }
+    ]
 
 
 def _error(message: str) -> str:
@@ -230,13 +242,14 @@ class AgentService:
 
     async def _loop(self, st: _RunState) -> tuple[StopReason, str | None]:
         lim = st.limits
+        tools = tools_for(st.policy or ExecutionPolicy.from_settings(self._settings))
         while True:
             if st.steps >= lim.max_steps:
                 return "step_limit", None
             st.steps += 1
             emit("step_started", step=st.steps)
             try:
-                turn = await self._llm.complete(st.messages, TOOLS, lim.max_tokens)
+                turn = await self._llm.complete(st.messages, tools, lim.max_tokens)
             except LLMError as e:
                 log.warning("llm call failed", extra={"agent_run_id": st.run_id, "error": str(e)})
                 return "llm_error", None

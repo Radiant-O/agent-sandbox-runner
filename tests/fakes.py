@@ -88,11 +88,13 @@ class ScriptedLLM:
         self.turns = list(turns)
         self.repeat_last = repeat_last
         self.requests: list[list[dict[str, Any]]] = []
+        self.tools: list[list[dict[str, Any]]] = []
 
     async def complete(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]], max_tokens: int
     ) -> LLMTurn:
         self.requests.append([dict(m) for m in messages])
+        self.tools.append(tools)
         if not self.turns:
             raise AssertionError("ScriptedLLM ran out of turns")
         nxt = self.turns[0] if (self.repeat_last and len(self.turns) == 1) else self.turns.pop(0)

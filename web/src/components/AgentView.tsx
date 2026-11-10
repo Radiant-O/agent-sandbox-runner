@@ -8,7 +8,7 @@ import { openStream, replay } from "../lib/stream";
 import { Lifeline } from "./Lifeline";
 import { Notice, type NoticeState } from "./Notice";
 import { noticeFor } from "./RunView";
-import { inline } from "../lib/inline";
+import { rich } from "../lib/inline";
 
 export function AgentView({
   status,
@@ -100,7 +100,7 @@ export function AgentView({
   );
 
   const run = view.run;
-  const tools = view.items.filter((i) => i.kind === "tool").length;
+  const tools = run?.executions.length ?? view.items.filter((i) => i.kind === "tool").length;
 
   return (
     <div className="grid min-h-0 flex-1 gap-6 px-4 pb-6 sm:px-6 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] lg:px-8">
@@ -209,11 +209,11 @@ function Item({ item, run }: { item: TranscriptItem; run: AgentRun | null }) {
     case "step":
       return <div className="pt-2 text-xs text-muted">Model step {item.step}</div>;
     case "thought":
-      return <p className="max-w-prose whitespace-pre-wrap text-[0.95rem] leading-relaxed text-fg/90">{inline(item.text)}</p>;
+      return <div className="max-w-prose text-[0.95rem] leading-relaxed text-fg/90">{rich(item.text)}</div>;
     case "answer":
       return (
         <div className="max-w-prose rounded-2xl border border-line bg-panel px-5 py-4">
-          <p className="whitespace-pre-wrap text-[0.97rem] leading-relaxed">{inline(item.text)}</p>
+          <div className="text-[0.97rem] leading-relaxed">{rich(item.text)}</div>
           {run && <Verification run={run} />}
         </div>
       );
@@ -282,7 +282,7 @@ function Outcome({ run, tools }: { run: AgentRun; tools: number }) {
   if (run.stop_reason === "completed") {
     return (
       <li className="text-xs text-muted">
-        {run.steps} model steps, {tools} code runs.
+        {run.steps} model {run.steps === 1 ? "step" : "steps"}, {tools} code {tools === 1 ? "run" : "runs"}.
       </li>
     );
   }

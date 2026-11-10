@@ -101,3 +101,11 @@ body {
 .cm-focused .cm-selectionBackground {
   background: rgb(var(--live) / 0.18) !important;
 }
+
+/* Code must read exactly as written: no ">=" -> "≥" ligatures. */
+.font-mono,
+code,
+pre {
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+}
