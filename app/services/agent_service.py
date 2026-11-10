@@ -284,6 +284,11 @@ class AgentService:
         if timeout is not None and (isinstance(timeout, bool) or not isinstance(timeout, int)):
             return _error("'timeout_seconds' must be an integer.")
         emit("tool_call", call_id=tc.id, code=code, timeout_seconds=timeout)
+        try:
+            # Free check first: never boot a microVM for code the policy will reject.
+            self._executions.check_policy(code, timeout, st.policy)
+        except PolicyViolation as e:
+            return _error(e.message)
 
         if st.session is None:
             lifetime = int(st.limits.timeout_seconds) + SANDBOX_LIFETIME_GRACE_SECONDS

@@ -53,6 +53,15 @@ The run against real E2B (2026-11-10) is summarised in the README's "Live result
 - **Agent, live** (Claude Haiku 5.5 via OpenRouter): asked for the 20th Fibonacci number, the agent made one tool call, the sandbox printed `6765` (exit 0, 1.3 s), and the agent answered from that observed output. The run took 2 LLM steps and about 8 s end to end.
 - Before that, a malformed API key produced HTTP 401 from OpenRouter. The agent handled it as designed: it stopped with `llm_error`, `answer: null`, and made no claims.
 
+## Building the console: what the real system taught me
+
+- **The lifeline had to be real.** An animated timeline would have been easy to fake. Instead, backends emit phase events (`sandbox_created`, `code_uploaded`, `stdout`, `exited`, `sandbox_killed`) through a context-local sink. The service records the timings on the execution and streams them over SSE with a replay buffer, so a browser that connects late still sees the whole life.
+- **An output flood costs bandwidth, not memory.** With `retain_output=False`, the server keeps 64 KB, but E2B still streams every byte. A 5 MB print took longer than a 10 s timeout and correctly ended as `timed_out`. The demo example now prints ~1 MB, which finishes in ~3.8 s, truncated, as the copy says. I measured it rather than guessed: a live probe showed the program itself finished in 0.02 s, and the rest was transfer time.
+- **Check policy before you pay.** A recorded agent run showed the model asking for a 30 s timeout under a 15 s demo cap. The policy rejected it correctly, but only *after* a microVM had booted. The agent now validates before opening a session, and a test pins it.
+- **Recordings make the demo resilient.** When the daily budget runs out, examples replay real recorded event streams with their original timing, so a reviewer arriving late still sees the real system.
+- **Windows found an SPA bug.** Starlette passes static paths with OS separators, so `api1
+ope` didn't match the `api/` prefix and unknown API routes were served the UI. A test caught it.
+
 ## Lessons learned
 
 Pending: to be written after the live runs.

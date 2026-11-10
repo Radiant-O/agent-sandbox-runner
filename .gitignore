@@ -9,3 +9,6 @@ __pycache__/
 .superpowers/
 dist/
 *.egg-info/
+web/node_modules/
+app/static/
+web/*.tsbuildinfo

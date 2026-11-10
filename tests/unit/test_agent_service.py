@@ -238,3 +238,22 @@ async def test_custom_limits_override_settings(settings: Settings, store: Execut
     res = await agent.run("x", "o", limits=AgentLimits(10, 1, 60, 256))
     assert res.stop_reason == "tool_call_limit"
     assert res.tool_calls == 1
+
+
+async def test_policy_rejection_does_not_boot_a_sandbox(
+    settings: Settings, store: ExecutionStore
+) -> None:
+    llm = ScriptedLLM(
+        [
+            LLMTurn(
+                text=None,
+                tool_calls=[
+                    ToolCall("c1", "execute_python", '{"code":"print(1)","timeout_seconds":999}')
+                ],
+            ),
+            say("ok"),
+        ]
+    )
+    agent, backend, _ = build(settings, store, llm)
+    await agent.run("x", "o")
+    assert backend.created == 0  # rejected by policy before spending on a microVM

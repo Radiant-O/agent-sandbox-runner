@@ -21,6 +21,18 @@ All submitted code is treated as hostile. That includes code written by the AI a
 | Agent bounds: max steps, max tool calls, a wall-clock budget, and max tokens per call. | `AGENT_*` settings |
 | Logs never contain code bodies (only size and sha256) or configured secrets (redacted). | `app/core/logging.py` |
 
+### Public demo (`/demo/*`, `DEMO_ENABLED=true`)
+
+| Control | Where |
+|---|---|
+| No credentials in the browser: demo endpoints run server-side as the `demo` owner. Same origin, so no CORS surface. | `app/demo/router.py` |
+| Stricter policy: 10 KB of code, 15 s timeout, agent limited to 4 steps and 2 tool calls. Checked *before* any spend, including before the agent boots a sandbox. | `DEMO_*` settings |
+| Cloudflare Turnstile verified server-side before any spend; it fails closed if Cloudflare can't be reached. | `app/demo/turnstile.py` |
+| Per-visitor hourly limits on a hashed IP (raw IPs are never stored). Proxy headers are trusted only with `TRUST_PROXY=true`. | `app/demo/guard.py` |
+| Global daily budget per UTC day, persisted in SQLite. This is the hard cap on worst-case spend. | `DailyBudget` |
+| The server refuses to start if the demo is enabled with sandbox internet on. | `create_app` |
+| Demo execution ids are random 128-bit values; any visitor holding an id can read that demo run (demo runs are public by design). | `DEMO_OWNER` |
+
 ## What this does **not** guarantee
 
 - **Isolation is E2B's.** A vulnerability in the sandbox or hypervisor is outside this project's control.

@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Tokens as RGB triplets so Tailwind can apply alpha. Color carries meaning only:
+   ok = succeeded, user = your code failed, late = timed out, infra = platform failed,
+   live = something is happening right now. */
+:root,
+[data-theme="dark"] {
+  --ink: 14 26 34; /* #0E1A22 */
+  --panel: 19 36 48; /* #132430 */
+  --raised: 26 47 61;
+  --line: 34 57 74; /* #22394A */
+  --fg: 230 238 242; /* #E6EEF2 */
+  --muted: 138 163 178; /* #8AA3B2 */
+  --ok: 95 212 164; /* #5FD4A4 */
+  --user: 240 180 76; /* #F0B44C */
+  --late: 182 156 255; /* #B69CFF */
+  --infra: 255 122 107; /* #FF7A6B */
+  --live: 143 216 245; /* #8FD8F5 */
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --ink: 240 244 246;
+  --panel: 255 255 255;
+  --raised: 232 238 241;
+  --line: 205 216 223;
+  --fg: 16 33 43;
+  --muted: 83 106 120;
+  --ok: 18 140 96;
+  --user: 176 112 0;
+  --late: 109 76 214;
+  --infra: 205 64 48;
+  --live: 0 122 168;
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-ink font-sans text-fg antialiased;
+  font-feature-settings: "ss01", "cv11";
+}
+
+::selection {
+  background: rgb(var(--live) / 0.3);
+}
+
+:focus-visible {
+  outline: 2px solid rgb(var(--live));
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--line)) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* CodeMirror inherits the console's tokens. */
+.cm-editor {
+  height: 100%;
+  background: transparent !important;
+  font-size: 0.86rem;
+}
+.cm-editor.cm-focused {
+  outline: none !important;
+}
+.cm-scroller {
+  font-family: "JetBrains Mono", ui-monospace, monospace !important;
+  line-height: 1.65 !important;
+}
+.cm-gutters {
+  background: transparent !important;
+  border-right: 1px solid rgb(var(--line)) !important;
+  color: rgb(var(--muted) / 0.6) !important;
+}
+.cm-activeLine,
+.cm-activeLineGutter {
+  background: rgb(var(--live) / 0.05) !important;
+}
+.cm-cursor {
+  border-left-color: rgb(var(--live)) !important;
+}
+.cm-selectionBackground,
+.cm-focused .cm-selectionBackground {
+  background: rgb(var(--live) / 0.18) !important;
+}

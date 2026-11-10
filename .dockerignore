@@ -10,3 +10,6 @@ data
 tests
 docs
 examples
+scripts
+web/node_modules
+app/static

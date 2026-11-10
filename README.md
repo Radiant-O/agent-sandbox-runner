@@ -4,6 +4,10 @@ Secure Python execution for AI agents, built on [E2B](https://e2b.dev) cloud san
 
 A FastAPI service that takes untrusted Python, from a developer or from an LLM agent, and runs it inside isolated E2B sandboxes. It manages the whole sandbox lifecycle and returns structured, classified results. A bounded, tool-calling Claude agent uses **the same** execution path, so agent-generated code gets the same policy, limits and audit trail as direct API calls.
 
+It also ships a **live console**: a public demo where anyone can run code or the agent and watch each microVM boot, run and get destroyed, timed from real backend events. The browser never holds a credential.
+
+![Console: a failing run, with the lifecycle drawn to scale and the verdict blaming the code, not the platform](docs/images/console-run-error.png)
+
 ```mermaid
 flowchart LR
     C[Client] -->|X-API-Key| API[FastAPI<br/>auth · rate limit · validation]
@@ -22,6 +26,31 @@ flowchart LR
 - **`POST /api/v1/agent/run`** takes a natural-language task. The agent decides whether code is needed, writes it, runs it through the sandbox tool, reads the result and answers. The response includes every execution record, so claims can be checked.
 - **`GET /metrics`** reports execution counts by status, p50/p95 duration, live and created sandboxes, average create time, cleanup failures, create retries and agent stop reasons.
 - **`GET /health`** is a liveness check. Interactive API docs are at **`/docs`** (OpenAPI).
+
+## The console
+
+| Run code | Agent | How it works |
+|---|---|---|
+| ![Streaming output live](docs/images/console-streaming.png) | ![Agent writes, runs and verifies](docs/images/console-agent.png) | ![Request path and live metrics](docs/images/console-inside.png) |
+
+- **The lifeline** shows a microVM's actual life (boot, upload, run, destroy), drawn to scale from the backend's phase events and growing live while the code runs. Each phase timing is also stored on the execution record.
+- **Output streams** to the terminal chunk by chunk over Server-Sent Events, under the same 64 KB-per-stream cap as the API.
+- **The verdict** says whose fault a failure was: your code (`failed`, `timed_out`) or the platform (`error`).
+- **Agent mode** shows each model step, the exact code Claude wrote, a lifeline for every sandbox run, and an answer marked **"Backed by the backend's records"** or **"Unverified"**, computed from stored executions rather than model text.
+- **How it works** lights up the path the last run took and shows live metrics, plus what the system does *not* promise.
+- When the day's demo budget is spent, examples **replay recorded real runs** (`app/demo/recordings.json`, captured by `scripts/record_demo.py`) instead of failing.
+- Works on phones, has dark and light themes, keyboard focus states and respects reduced motion.
+
+### How the public demo protects the keys
+
+The console talks only to `/demo/*` on the same origin. Those endpoints run code **server-side** as a fixed `demo` owner, so there is no API key in the browser to steal. Every request that spends money passes these checks in order, and nothing is spent until all of them pass:
+
+1. **Policy check** (free): code ≤ 10 KB, timeout ≤ 15 s. Rejected requests cost nothing, and the agent checks policy *before* booting a sandbox.
+2. **Cloudflare Turnstile** (when `TURNSTILE_SECRET_KEY` is set): verified server-side, and fails closed.
+3. **Per-visitor limit**: 10 runs and 3 agent runs an hour, keyed on a hashed IP. `X-Forwarded-For` is honoured only with `TRUST_PROXY=true`.
+4. **Global daily budget**: 300 runs and 40 agent runs per UTC day, persisted in SQLite so restarts don't reset it.
+
+The server refuses to start if the demo is enabled with sandbox internet on. Every cap is configurable; see [`.env.example`](.env.example).
 
 ## Quickstart
 
@@ -45,6 +74,15 @@ With Docker:
 docker build -t agent-sandbox-runner .
 docker run --rm -p 8000:8000 --env-file .env -v asr-data:/data agent-sandbox-runner
 ```
+
+To run the console locally, enable `DEMO_ENABLED=true` and build the UI once (Node 20+):
+
+```bash
+cd web && npm ci && npm run build && cd ..   # emits app/static, served at http://localhost:8000/
+# or for UI development with hot reload: (cd web && npm run dev)  -> http://localhost:5173
+```
+
+The Docker image builds the UI itself (multi-stage), so `docker build` needs no local Node.
 
 Then run every outcome end to end: `API_KEY=... python examples/run_examples.py` (add `--agent` to include one agent run).
 
@@ -141,10 +179,13 @@ app/
   services/       execution_service.py, agent_service.py
   llm/            base.py (provider protocol), openai_compat.py (OpenRouter)
   schemas/        request/response models
+  demo/           public demo API: guard (limits, daily budget), turnstile, SSE, examples, recordings
   domain.py       ExecutionRecord, statuses, error categories
   store.py        SQLite persistence
 tests/unit/       fast, deterministic
 tests/integration/ live E2B / LLM, opt-in
+web/              console UI: Vite + React + TypeScript + Tailwind (builds into app/static)
+scripts/          record_demo.py (captures real runs for replay mode)
 examples/         run_examples.py, requests.http
 docs/             design.md, case-study.md
 ```

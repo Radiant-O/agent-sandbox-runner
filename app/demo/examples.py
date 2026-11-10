@@ -66,8 +66,8 @@ EXAMPLES: list[dict[str, object]] = [
         "id": "flood",
         "title": "Output flood",
         "expect": "succeeded",
-        "blurb": "Prints ~5 MB. The server keeps 64 KB and flags it as truncated.",
-        "code": 'for i in range(100_000):\n    print(f"line {i:06d} " + "x" * 40)\n',
+        "blurb": "Prints ~1 MB. The server keeps 64 KB and flags it as truncated.",
+        "code": 'for i in range(20_000):\n    print(f"line {i:05d} " + "x" * 40)\n',
         "timeout_seconds": 10,
     },
     {
