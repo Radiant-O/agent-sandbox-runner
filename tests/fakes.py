@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from app.sandbox.base import RunOutput, SandboxSession
+from app.sandbox.events import emit
 
 OK = RunOutput(
     stdout="ok\n",
@@ -24,11 +25,17 @@ class FakeSession:
 
     async def run_python(self, code: str, timeout_seconds: int) -> RunOutput:
         self._backend.codes.append(code)
+        emit("code_uploaded", upload_ms=1)
         if self._backend.delay:
             await asyncio.sleep(self._backend.delay)
         nxt = self._backend.outputs.pop(0) if self._backend.outputs else OK
         if isinstance(nxt, Exception):
             raise nxt
+        if nxt.stdout:
+            emit("stdout", data=nxt.stdout)
+        if nxt.stderr:
+            emit("stderr", data=nxt.stderr)
+        emit("exited", exit_code=nxt.exit_code, timed_out=nxt.timed_out, run_ms=nxt.duration_ms)
         return nxt
 
 
@@ -51,9 +58,11 @@ class FakeSandboxBackend:
 
     @asynccontextmanager
     async def session(self, lifetime_seconds: int) -> AsyncIterator[SandboxSession]:
+        emit("sandbox_creating")
         if self.create_error is not None:
             raise self.create_error
         self.created += 1
+        emit("sandbox_created", sandbox_id=f"fake-sbx-{self.created}", create_ms=1)
         self.lifetimes.append(lifetime_seconds)
         self.live += 1
         self.max_live = max(self.max_live, self.live)
@@ -62,6 +71,7 @@ class FakeSandboxBackend:
         finally:
             self.live -= 1
             self.killed += 1
+            emit("sandbox_killed", sandbox_id=f"fake-sbx-{self.created}", kill_ms=1)
 
 
 # ---- LLM ---------------------------------------------------------------------

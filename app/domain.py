@@ -62,6 +62,11 @@ class ExecutionRecord:
     error_message: str | None = None
     exception_type: str | None = None
     sandbox_id: str | None = field(default=None)
+    # Lifecycle phase timings (ms). kill_ms is only set for single-execution sandboxes.
+    create_ms: int | None = None
+    upload_ms: int | None = None
+    run_ms: int | None = None
+    kill_ms: int | None = None
 
     @classmethod
     def new(

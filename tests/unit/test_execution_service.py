@@ -179,3 +179,50 @@ def test_parse_exception_type() -> None:
     assert parse_exception_type("KeyboardInterrupt") == "KeyboardInterrupt"
     assert parse_exception_type("hello") is None
     assert parse_exception_type("") is None
+
+
+# ---- live lifecycle events (console UI) ----------------------------------------
+
+
+async def test_standalone_execution_publishes_lifecycle_in_order(
+    settings: Settings, store: ExecutionStore
+) -> None:
+    from app.services.events import EventBus
+
+    bus = EventBus()
+    backend = FakeSandboxBackend([out(0, stdout="4\n")])
+    svc = ExecutionService(store, backend, Metrics(), settings, events=bus)
+    rec = await svc.submit("print(2+2)", None, "o")
+    await svc.wait(rec.id, "o")
+    events = [e async for e in bus.subscribe(rec.id)]
+    assert [e["type"] for e in events] == [
+        "queued",
+        "sandbox_creating",
+        "sandbox_created",
+        "code_uploaded",
+        "stdout",
+        "exited",
+        "sandbox_killed",
+        "finished",
+    ]
+    finished = events[-1]["data"]["execution"]
+    assert finished["status"] == "succeeded"
+    assert finished["create_ms"] is not None and finished["kill_ms"] is not None
+    stored = await store.get(rec.id, "o")
+    assert stored is not None
+    assert None not in (stored.create_ms, stored.upload_ms, stored.run_ms, stored.kill_ms)
+
+
+async def test_create_failure_still_finishes_stream(
+    settings: Settings, store: ExecutionStore
+) -> None:
+    from app.services.events import EventBus
+
+    bus = EventBus()
+    backend = FakeSandboxBackend(create_error=SandboxUnavailableError("no capacity"))
+    svc = ExecutionService(store, backend, Metrics(), settings, events=bus)
+    rec = await svc.submit("print(1)", None, "o")
+    await svc.wait(rec.id, "o")
+    types = [e["type"] async for e in bus.subscribe(rec.id)]
+    assert types[0] == "queued" and types[-1] == "finished"
+    assert "sandbox_created" not in types

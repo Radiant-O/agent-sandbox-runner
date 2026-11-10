@@ -17,10 +17,13 @@ from app.core.metrics import Metrics
 from app.domain import ExecutionRecord, ExecutionStatus
 from app.llm.base import LLMError, LLMProvider, ToolCall
 from app.sandbox.base import SandboxError, SandboxSession
+from app.sandbox.events import emit, sink_scope
 from app.schemas.agents import AgentRunResult, StopReason
 from app.schemas.executions import ExecutionOut
+from app.services.events import EventBus
 from app.services.execution_service import (
     SANDBOX_LIFETIME_GRACE_SECONDS,
+    ExecutionPolicy,
     ExecutionService,
     PolicyViolation,
 )
@@ -90,11 +93,27 @@ def _result_for_model(rec: ExecutionRecord) -> str:
     )
 
 
+@dataclass(frozen=True)
+class AgentLimits:
+    max_steps: int
+    max_tool_calls: int
+    timeout_seconds: float
+    max_tokens: int
+
+    @classmethod
+    def from_settings(cls, s: Settings) -> "AgentLimits":
+        return cls(
+            s.AGENT_MAX_STEPS, s.AGENT_MAX_TOOL_CALLS, s.AGENT_TIMEOUT_SECONDS, s.AGENT_MAX_TOKENS
+        )
+
+
 @dataclass
 class _RunState:
     run_id: str
     owner: str
     stack: AsyncExitStack
+    limits: AgentLimits
+    policy: ExecutionPolicy | None
     session: SandboxSession | None = None
     steps: int = 0
     tool_calls: int = 0
@@ -108,24 +127,81 @@ class AgentService:
         executions: ExecutionService,
         metrics: Metrics,
         settings: Settings,
+        events: EventBus | None = None,
     ) -> None:
         self._llm = llm
         self._executions = executions
         self._metrics = metrics
         self._settings = settings
+        self._events = events
+        self._tasks: set[asyncio.Task[None]] = set()
 
-    async def run(self, task: str, owner: str) -> AgentRunResult:
+    # ---- streaming entry point --------------------------------------------------
+
+    def start(
+        self,
+        task: str,
+        owner: str,
+        limits: AgentLimits | None = None,
+        policy: ExecutionPolicy | None = None,
+    ) -> str:
+        """Start a run in the background; its events stream on the bus under the run id."""
+        if self._events is None:
+            raise RuntimeError("AgentService.start requires an EventBus")
+        bus = self._events
         run_id = "run_" + uuid.uuid4().hex
+        bus.open(run_id)
+        bus.publish(run_id, "started", {"run_id": run_id, "task": task})
+
+        async def runner() -> None:
+            result: AgentRunResult | None = None
+            try:
+                with sink_scope(lambda t, d: bus.publish(run_id, t, d)):
+                    result = await self.run(
+                        task, owner, run_id=run_id, limits=limits, policy=policy
+                    )
+            except Exception:
+                log.exception("agent run crashed", extra={"agent_run_id": run_id})
+            finally:
+                if result is not None:
+                    bus.publish(run_id, "finished", {"run": result.model_dump(mode="json")})
+                else:
+                    bus.publish(run_id, "failed", {"message": "Agent run failed unexpectedly."})
+                bus.close(run_id)
+
+        t = asyncio.create_task(runner(), name=f"agent-{run_id}")
+        self._tasks.add(t)
+        t.add_done_callback(self._tasks.discard)
+        return run_id
+
+    async def shutdown(self) -> None:
+        for t in list(self._tasks):
+            t.cancel()
+        await asyncio.gather(*self._tasks, return_exceptions=True)
+
+    # ---- core loop ----------------------------------------------------------------
+
+    async def run(
+        self,
+        task: str,
+        owner: str,
+        *,
+        run_id: str | None = None,
+        limits: AgentLimits | None = None,
+        policy: ExecutionPolicy | None = None,
+    ) -> AgentRunResult:
+        run_id = run_id or "run_" + uuid.uuid4().hex
+        lim = limits or AgentLimits.from_settings(self._settings)
         answer: str | None = None
         async with AsyncExitStack() as stack:  # closes the sandbox session, even on timeout
-            st = _RunState(run_id=run_id, owner=owner, stack=stack)
+            st = _RunState(run_id=run_id, owner=owner, stack=stack, limits=lim, policy=policy)
             st.messages = [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": task},
             ]
             stop_reason: StopReason
             try:
-                async with asyncio.timeout(self._settings.AGENT_TIMEOUT_SECONDS):
+                async with asyncio.timeout(lim.timeout_seconds):
                     stop_reason, answer = await self._loop(st)
             except TimeoutError:
                 stop_reason, answer = "time_limit", None
@@ -153,17 +229,20 @@ class AgentService:
         )
 
     async def _loop(self, st: _RunState) -> tuple[StopReason, str | None]:
-        s = self._settings
+        lim = st.limits
         while True:
-            if st.steps >= s.AGENT_MAX_STEPS:
+            if st.steps >= lim.max_steps:
                 return "step_limit", None
             st.steps += 1
+            emit("step_started", step=st.steps)
             try:
-                turn = await self._llm.complete(st.messages, TOOLS, s.AGENT_MAX_TOKENS)
+                turn = await self._llm.complete(st.messages, TOOLS, lim.max_tokens)
             except LLMError as e:
                 log.warning("llm call failed", extra={"agent_run_id": st.run_id, "error": str(e)})
                 return "llm_error", None
 
+            if turn.text:
+                emit("model_text", step=st.steps, text=turn.text, final=not turn.tool_calls)
             if not turn.tool_calls:
                 return "completed", turn.text or ""
 
@@ -182,11 +261,12 @@ class AgentService:
                 }
             )
             for tc in turn.tool_calls:
-                if st.tool_calls >= s.AGENT_MAX_TOOL_CALLS:
+                if st.tool_calls >= lim.max_tool_calls:
                     return "tool_call_limit", None
                 st.tool_calls += 1
                 content = await self._handle_tool_call(st, tc)
                 st.messages.append({"role": "tool", "tool_call_id": tc.id, "content": content})
+                emit("tool_result", call_id=tc.id, **json.loads(content))
 
     async def _handle_tool_call(self, st: _RunState, tc: ToolCall) -> str:
         if tc.name != TOOL_NAME:
@@ -203,9 +283,10 @@ class AgentService:
         timeout = args.get("timeout_seconds")
         if timeout is not None and (isinstance(timeout, bool) or not isinstance(timeout, int)):
             return _error("'timeout_seconds' must be an integer.")
+        emit("tool_call", call_id=tc.id, code=code, timeout_seconds=timeout)
 
         if st.session is None:
-            lifetime = int(self._settings.AGENT_TIMEOUT_SECONDS) + SANDBOX_LIFETIME_GRACE_SECONDS
+            lifetime = int(st.limits.timeout_seconds) + SANDBOX_LIFETIME_GRACE_SECONDS
             try:
                 st.session = await st.stack.enter_async_context(
                     self._executions.open_session(lifetime)
@@ -215,7 +296,7 @@ class AgentService:
 
         try:
             rec = await self._executions.run_in_session(
-                st.session, code, timeout, st.owner, agent_run_id=st.run_id
+                st.session, code, timeout, st.owner, agent_run_id=st.run_id, policy=st.policy
             )
         except PolicyViolation as e:
             return _error(e.message)

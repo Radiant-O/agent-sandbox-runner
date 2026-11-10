@@ -42,6 +42,10 @@ class ExecutionOut(BaseModel):
     error_message: str | None
     exception_type: str | None
     sandbox_id: str | None
+    create_ms: int | None = None
+    upload_ms: int | None = None
+    run_ms: int | None = None
+    kill_ms: int | None = None
 
     @classmethod
     def from_record(cls, rec: ExecutionRecord) -> "ExecutionOut":

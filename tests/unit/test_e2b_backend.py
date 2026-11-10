@@ -311,3 +311,22 @@ async def test_create_uses_one_idempotency_key_across_retries(
     assert re.fullmatch(r"[a-z0-9-]{1,255}", keys[0])
     await _run(backend)
     assert script.create_calls[-1]["idempotency_key"] != keys[0]  # new logical create
+
+
+async def test_backend_emits_lifecycle_events_with_capped_output(
+    backend: E2BSandboxBackend, script: Script
+) -> None:
+    from app.sandbox.events import sink_scope
+
+    seen: list[tuple[str, dict[str, Any]]] = []
+    script.chunks_out = ["y" * 1000] * 5  # 5000 bytes, cap is 1024
+    with sink_scope(lambda t, d: seen.append((t, d))):
+        await _run(backend)
+    types = [t for t, _ in seen]
+    assert types[0] == "sandbox_creating"
+    assert types[1] == "sandbox_created" and seen[1][1]["sandbox_id"] == "sbx-test"
+    assert types[2] == "code_uploaded"
+    assert types[-2] == "exited" and seen[-2][1]["exit_code"] == 0
+    assert types[-1] == "sandbox_killed"
+    streamed = "".join(d["data"] for t, d in seen if t == "stdout")
+    assert len(streamed.encode()) == 1024  # streamed output respects the same cap

@@ -41,6 +41,7 @@ from app.sandbox.base import (
     SandboxUnavailableError,
     SandboxUpstreamError,
 )
+from app.sandbox.events import emit
 from app.sandbox.output import OutputBuffer
 
 log = logging.getLogger(__name__)
@@ -77,8 +78,19 @@ class E2BSession:
         err = OutputBuffer(self._max_output)
         start = self._clock()
 
+        def on_stdout(chunk: str) -> None:
+            accepted = out.append(chunk)
+            if accepted:
+                emit("stdout", data=accepted)
+
+        def on_stderr(chunk: str) -> None:
+            accepted = err.append(chunk)
+            if accepted:
+                emit("stderr", data=accepted)
+
         try:
             await self._sbx.files.write(SCRIPT_PATH, code)
+            emit("code_uploaded", upload_ms=int((self._clock() - start) * 1000))
         except AuthenticationException as e:
             raise SandboxAuthError("E2B rejected the credentials") from e
         except Exception as e:
@@ -87,12 +99,13 @@ class E2BSession:
 
         exit_code: int | None = None
         timed_out = False
+        run_start = self._clock()
         try:
             result = await self._sbx.commands.run(
                 RUN_COMMAND,
                 timeout=timeout_seconds,
-                on_stdout=out.append,
-                on_stderr=err.append,
+                on_stdout=on_stdout,
+                on_stderr=on_stderr,
                 # Without this the SDK keeps its own uncapped copy of all output in memory.
                 retain_output=False,
             )
@@ -121,6 +134,8 @@ class E2BSession:
             # SandboxException, ServiceBusyException (not a SandboxException), transport
             # errors, and bare Exceptions raised by the SDK's stream handling.
             raise SandboxUpstreamError(f"E2B error during execution: {type(e).__name__}") from e
+        run_ms = int((self._clock() - run_start) * 1000)
+        emit("exited", exit_code=exit_code, timed_out=timed_out, run_ms=run_ms)
         return RunOutput(
             stdout=out.text,
             stderr=err.text,
@@ -193,22 +208,27 @@ class E2BSandboxBackend:
             raise SandboxUnavailableError(f"Could not create sandbox: {e}") from e
         create_ms = _ms_since(start)
         self._metrics.sandbox_created(create_ms)
+        emit("sandbox_created", sandbox_id=sbx.sandbox_id, create_ms=create_ms)
         log.info("sandbox created", extra={"sandbox_id": sbx.sandbox_id, "create_ms": create_ms})
         return sbx
 
     @asynccontextmanager
     async def session(self, lifetime_seconds: int) -> AsyncIterator[SandboxSession]:
+        emit("sandbox_creating")
         sbx = await self._create(lifetime_seconds)
         try:
             yield E2BSession(sbx, self._settings.MAX_OUTPUT_BYTES, self._clock)
         finally:
+            kill_start = time.monotonic()
             try:
                 await sbx.kill()
                 self._metrics.sandbox_killed()
+                emit("sandbox_killed", sandbox_id=sbx.sandbox_id, kill_ms=_ms_since(kill_start))
                 log.info("sandbox killed", extra={"sandbox_id": sbx.sandbox_id})
             except Exception:
                 # The lifetime timeout set at create() is the backstop: E2B destroys it anyway.
                 self._metrics.cleanup_failed()
+                emit("cleanup_failed", sandbox_id=sbx.sandbox_id)
                 log.exception(
                     "sandbox kill failed; relying on lifetime timeout",
                     extra={"sandbox_id": sbx.sandbox_id, "lifetime_seconds": lifetime_seconds},

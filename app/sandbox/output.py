@@ -8,20 +8,22 @@ class OutputBuffer:
         self._size = 0
         self.truncated = False
 
-    def append(self, chunk: str) -> None:
+    def append(self, chunk: str) -> str:
+        """Store what fits; return the accepted text (empty once full)."""
         if self.truncated:
-            return
+            return ""
         data = chunk.encode("utf-8")
         room = self._limit - self._size
         if len(data) <= room:
             self._parts.append(data)
             self._size += len(data)
-            return
+            return chunk
         # Keep what fits, cut on a UTF-8 character boundary, drop everything after.
         cut = data[:room].decode("utf-8", errors="ignore").encode("utf-8")
         self._parts.append(cut)
         self._size += len(cut)
         self.truncated = True
+        return cut.decode("utf-8")
 
     @property
     def text(self) -> str:

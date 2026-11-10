@@ -39,13 +39,31 @@ class Settings(BaseSettings):
     AGENT_TIMEOUT_SECONDS: float = 180
     AGENT_MAX_TOKENS: int = 1024
 
+    # Public demo (/demo/*): no browser credentials, capped spend
+    DEMO_ENABLED: bool = False
+    DEMO_RUNS_PER_HOUR: int = 10
+    DEMO_AGENT_RUNS_PER_HOUR: int = 3
+    DEMO_DAILY_RUNS: int = 300
+    DEMO_DAILY_AGENT_RUNS: int = 40
+    DEMO_MAX_TIMEOUT_SECONDS: int = 15
+    DEMO_DEFAULT_TIMEOUT_SECONDS: int = 10
+    DEMO_MAX_CODE_BYTES: int = 10_000
+    DEMO_AGENT_MAX_STEPS: int = 4
+    DEMO_AGENT_MAX_TOOL_CALLS: int = 2
+    DEMO_AGENT_TIMEOUT_SECONDS: float = 90
+    DEMO_AGENT_MAX_TOKENS: int = 800
+    TURNSTILE_SITE_KEY: str | None = None
+    TURNSTILE_SECRET_KEY: SecretStr | None = None
+    TRUST_PROXY: bool = False  # honour X-Forwarded-For (only behind a trusted proxy)
+    PUBLIC_REPO_URL: str | None = None
+
     def api_key_list(self) -> list[str]:
         return [k.strip() for k in self.API_KEYS.get_secret_value().split(",") if k.strip()]
 
     def secret_values(self) -> list[str]:
         """Every configured secret, for log redaction."""
         values = self.api_key_list()
-        for s in (self.E2B_API_KEY, self.LLM_API_KEY):
+        for s in (self.E2B_API_KEY, self.LLM_API_KEY, self.TURNSTILE_SECRET_KEY):
             if s is not None and s.get_secret_value():
                 values.append(s.get_secret_value())
         return values

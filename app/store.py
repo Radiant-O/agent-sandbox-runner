@@ -67,6 +67,12 @@ class ExecutionStore:
         self._db = await aiosqlite.connect(self._path)
         await self._db.execute("PRAGMA journal_mode=WAL")
         await self._db.executescript(_SCHEMA)
+        # Lightweight forward migration: add columns introduced after a DB was created.
+        async with self._db.execute("PRAGMA table_info(executions)") as cur:
+            existing = {row[1] for row in await cur.fetchall()}
+        for name in _FIELDS:
+            if name not in existing:
+                await self._db.execute(f"ALTER TABLE executions ADD COLUMN {name}")
         await self._db.commit()
 
     async def close(self) -> None:

@@ -5,13 +5,17 @@ import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
+from starlette.staticfiles import StaticFiles
+from starlette.types import Scope
 
 from app.api import agents, executions, system
 from app.api.system import VERSION
@@ -19,14 +23,34 @@ from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging, request_id_var
 from app.core.metrics import Metrics
 from app.core.security import RateLimiter
+from app.demo import router as demo_router
+from app.demo.guard import DailyBudget, VisitorLimiter
+from app.demo.turnstile import TurnstileVerifier, Verifier
 from app.llm.base import LLMProvider
 from app.llm.openai_compat import OpenAICompatibleProvider
 from app.sandbox.base import SandboxBackend
 from app.services.agent_service import AgentService
+from app.services.events import EventBus
 from app.services.execution_service import ExecutionService, PolicyViolation
 from app.store import ExecutionStore
 
 log = logging.getLogger("app.access")
+
+DEFAULT_STATIC_DIR = Path(__file__).with_name("static")
+_NOT_SPA_PREFIXES = ("api/", "demo/", "docs", "redoc", "openapi.json", "health", "metrics")
+
+
+class SPAStaticFiles(StaticFiles):
+    """Serve the built console; unknown client-side routes fall back to index.html."""
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            rel = path.replace("\\", "/")  # Starlette uses OS separators (Windows)
+            if exc.status_code != 404 or rel.startswith(_NOT_SPA_PREFIXES) or "." in rel:
+                raise
+            return await super().get_response("index.html", scope)
 
 
 def _error(request: Request, status: int, code: str, message: str, **kw: Any) -> JSONResponse:
@@ -43,8 +67,17 @@ def create_app(
     *,
     backend: SandboxBackend | None = None,
     llm: LLMProvider | None = None,
+    turnstile: Verifier | None = None,
+    static_dir: Path | None = None,
 ) -> FastAPI:
     settings = settings or get_settings()
+    if settings.DEMO_ENABLED and settings.SANDBOX_ALLOW_INTERNET:
+        raise ValueError("Refusing to start: the public demo requires sandbox internet off.")
+    if turnstile is None and settings.TURNSTILE_SECRET_KEY is not None:
+        secret = settings.TURNSTILE_SECRET_KEY.get_secret_value()
+        if secret:
+            turnstile = TurnstileVerifier(secret)
+    static_root = static_dir or DEFAULT_STATIC_DIR
     configure_logging(settings.LOG_LEVEL, settings.secret_values())
     llm_key = settings.LLM_API_KEY.get_secret_value() if settings.LLM_API_KEY else ""
     if llm is None and llm_key and settings.LLM_MODEL:
@@ -65,17 +98,32 @@ def create_app(
             sandbox_backend: SandboxBackend = E2BSandboxBackend(settings, metrics)
         else:
             sandbox_backend = backend
-        svc = ExecutionService(store, sandbox_backend, metrics, settings)
+        events = EventBus()
+        svc = ExecutionService(store, sandbox_backend, metrics, settings, events=events)
         await svc.recover()
         app.state.metrics = metrics
         app.state.execution_service = svc
         app.state.rate_limiter = RateLimiter(settings.RATE_LIMIT_PER_MINUTE)
-        app.state.agent_service = (
-            AgentService(llm, svc, metrics, settings) if llm is not None else None
-        )
+        agent = AgentService(llm, svc, metrics, settings, events=events) if llm else None
+        app.state.agent_service = agent
+        if settings.DEMO_ENABLED:
+            budget = DailyBudget(store.db)
+            await budget.init()
+            app.state.demo = demo_router.DemoContext(
+                settings=settings,
+                executions=svc,
+                agent=agent,
+                events=events,
+                metrics=metrics,
+                budget=budget,
+                visitors=VisitorLimiter(),
+                turnstile=turnstile,
+            )
         try:
             yield
         finally:
+            if agent is not None:
+                await agent.shutdown()
             await svc.shutdown()
             await store.close()
 
@@ -138,4 +186,7 @@ def create_app(
     app.include_router(system.router)
     app.include_router(executions.router)
     app.include_router(agents.router)
+    app.include_router(demo_router.router)
+    if (static_root / "index.html").exists():
+        app.mount("/", SPAStaticFiles(directory=static_root, html=True), name="console")
     return app

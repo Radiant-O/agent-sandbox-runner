@@ -195,3 +195,46 @@ async def test_tool_output_trimmed_for_model(settings: Settings, store: Executio
     await agent.run("x", "o")
     content = json.loads(str(tool_messages(llm.requests[1])[0]["content"]))
     assert len(content["stdout"]) <= 4100
+
+
+# ---- streaming (console UI) -----------------------------------------------------
+
+
+async def test_started_run_streams_events(settings: Settings, store: ExecutionStore) -> None:
+    from app.services.agent_service import AgentLimits
+    from app.services.events import EventBus
+
+    bus = EventBus()
+    ok = RunOutput("6765\n", "", False, False, 0, False, 3)
+    llm = ScriptedLLM([call("print(6765)"), say("It is 6765.")])
+    backend = FakeSandboxBackend([ok])
+    metrics = Metrics()
+    execs = ExecutionService(store, backend, metrics, settings, events=bus)
+    agent = AgentService(llm, execs, metrics, settings, events=bus)
+
+    run_id = agent.start("fib?", "o", limits=AgentLimits(4, 2, 60, 512))
+    events = [e async for e in bus.subscribe(run_id)]
+    types = [e["type"] for e in events]
+
+    assert types[0] == "started"
+    assert "step_started" in types and "tool_call" in types
+    assert "sandbox_created" in types
+    stdout = [e for e in events if e["type"] == "stdout"]
+    assert stdout and stdout[0]["data"]["execution_id"].startswith("exe_")
+    tool_result = next(e for e in events if e["type"] == "tool_result")
+    assert tool_result["data"]["status"] == "succeeded"
+    assert types[-1] == "finished"
+    run = events[-1]["data"]["run"]
+    assert run["id"] == run_id and run["answer"] == "It is 6765."
+    assert run["any_execution_succeeded"] is True
+
+
+async def test_custom_limits_override_settings(settings: Settings, store: ExecutionStore) -> None:
+    from app.services.agent_service import AgentLimits
+
+    settings.AGENT_MAX_TOOL_CALLS = 10
+    llm = ScriptedLLM([call()], repeat_last=True)
+    agent, _, _ = build(settings, store, llm)
+    res = await agent.run("x", "o", limits=AgentLimits(10, 1, 60, 256))
+    assert res.stop_reason == "tool_call_limit"
+    assert res.tool_calls == 1
